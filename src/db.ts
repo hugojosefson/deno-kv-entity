@@ -1,14 +1,30 @@
-import {
-  Deferred,
-  deferred,
-} from "https://deno.land/std@0.187.0/async/deferred.ts";
+export type DbCallback<T> = (db: Deno.Kv) => Promise<T> | T;
 
-const instanceDeferred: Deferred<Deno.Kv> = deferred<Deno.Kv>();
-
-export async function getInstance(): Promise<Deno.Kv> {
-  if (instanceDeferred.state === "pending") {
-    const instance = await Deno.openKv();
-    instanceDeferred.resolve(instance);
+export async function doWithDb<T>(fn: DbCallback<T>): Promise<T> {
+  const db: Deno.Kv = await Deno.openKv();
+  try {
+    return await fn(db);
+  } finally {
+    db.close();
   }
-  return instanceDeferred;
+}
+
+export async function doWithSpecificDb<T>(
+  path: string,
+  fn: DbCallback<T>,
+): Promise<T> {
+  const db: Deno.Kv = await Deno.openKv(path);
+  try {
+    return await fn(db);
+  } finally {
+    db.close();
+  }
+}
+
+export function getDoWithDbFunctionForSpecificDb(
+  path: string,
+): typeof doWithDb {
+  return async function <T>(fn: DbCallback<T>): Promise<T> {
+    return await doWithSpecificDb(path, fn);
+  };
 }
