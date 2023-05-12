@@ -1,8 +1,8 @@
 {
   "tasks": {
     "all": "deno fmt && deno lint && deno task check && deno task test",
-    "check": "fd '\\.(mj|j|t)sx?$' --hidden --exec deno check '{}'",
-    "test": "deno test --allow-run --allow-env=VERBOSE",
-    "udd": "deno run --allow-read=. --allow-write=. --allow-net https://deno.land/x/udd@0.8.2/main.ts $(fd '(\\.(mj|j|t)sx?|^deno.jsonc?)$')"
+    "check": "fd '\\.(mj|j|t)sx?$' --hidden --exec deno check --unstable '{}'",
+    "test": "deno test --unstable --allow-run --allow-env=VERBOSE",
+    "udd": "deno run --unstable --allow-read=. --allow-write=. --allow-net https://deno.land/x/udd@0.8.2/main.ts $(fd '(\\.(mj|j|t)sx?|^deno.jsonc?)$')"
   }
 }
