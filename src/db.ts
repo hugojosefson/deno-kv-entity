@@ -12,7 +12,7 @@ const VOID: void = undefined as void;
  * @param fn The function to mutate the value with. Return the mutated value.
  * @returns true if the value was mutated, false if the value was not found.
  */
-export async function mutateValue<T extends DataObject>(
+async function mutateValue<T extends DataObject>(
   connection: Deno.Kv,
   key: Deno.KvKey,
   fn: (value: T) => Promise<T> | T,
@@ -46,7 +46,7 @@ export async function mutateValue<T extends DataObject>(
  *
  * The first two are unique keys, and the last two are non-unique keys.
  */
-export interface EntityKeys {
+interface EntityKeys {
   unique: Deno.KvKey[];
   nonUnique: Deno.KvKey[];
 }
@@ -104,25 +104,13 @@ export interface DbConfig<Es extends string, Ts extends DataObject> {
   };
 }
 
-export type DbConnectionCallback<T> = (db: Deno.Kv) => Promise<T> | T;
+type DbConnectionCallback<T> = (db: Deno.Kv) => Promise<T> | T;
 
 /**
  * Defines a db, and how to store entities in it.
  */
 export class Db<Es extends string, Ts extends DataObject> {
   constructor(private readonly config: DbConfig<Es, Ts>) {}
-
-  async doWithConnection<T extends void | undefined | Ts | Ts[]>(
-    _expectedReturnType: T,
-    fn: DbConnectionCallback<T>,
-  ): Promise<T> {
-    const connection: Deno.Kv = await Deno.openKv(this.config.dbFilePath);
-    try {
-      return await fn(connection);
-    } finally {
-      connection.close();
-    }
-  }
 
   /**
    * Save an entity value to the db.
@@ -191,6 +179,18 @@ export class Db<Es extends string, Ts extends DataObject> {
         return entries.map(prop("value")) as T[];
       },
     );
+  }
+
+  private async doWithConnection<T extends void | undefined | Ts | Ts[]>(
+    _expectedReturnType: T,
+    fn: DbConnectionCallback<T>,
+  ): Promise<T> {
+    const connection: Deno.Kv = await Deno.openKv(this.config.dbFilePath);
+    try {
+      return await fn(connection);
+    } finally {
+      connection.close();
+    }
   }
 
   /**
