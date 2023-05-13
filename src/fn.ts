@@ -12,3 +12,7 @@ export async function awaitAsyncIterableIterator<T>(
   }
   return results;
 }
+
+export function prop<T>(name: keyof T): (obj: T) => T[keyof T] {
+  return (obj: T) => obj[name];
+}
