@@ -1,26 +1,9 @@
 import { awaitAsyncIterableIterator, prop } from "./fn.ts";
 
+/** An instance of something of the type void. */
 const VOID: void = undefined as void;
 
-// TODO: save a T under several keys, as one transaction
-export async function saveToMultipleKeys<T extends DataType>(
-  connection: Deno.Kv,
-  keys: Deno.KvKey[],
-  value: T,
-): Promise<void> {
-  const atomic = connection.atomic();
-  for (const key of keys) {
-    atomic.set(key, value);
-  }
-  await atomic.commit();
-}
-
 // TODO: manipulate single property of T, under several keys, as one transaction
-
-// TODO: encapsulate the structure of a db, the the keys to store things under, and how they can be looked up.
-// TODO: probably the structure (type) of T, so we know which properties are available to look it up under.
-// TODO: only lookup-able with unique properties?
-// TODO: listable with non-unique properties?
 
 /**
  * Mutate a value in the db.
@@ -29,7 +12,7 @@ export async function saveToMultipleKeys<T extends DataType>(
  * @param fn The function to mutate the value with. Return the mutated value.
  * @returns true if the value was mutated, false if the value was not found.
  */
-export async function mutateValue<T extends DataType>(
+export async function mutateValue<T extends DataObject>(
   connection: Deno.Kv,
   key: Deno.KvKey,
   fn: (value: T) => Promise<T> | T,
@@ -69,14 +52,14 @@ export interface EntityKeys {
 }
 
 /**
- * Type of something that can be stored in the db.
+ * Type of some data object, that can be stored in the db.
  */
-export type DataType = { [key: string & Deno.KvKeyPart]: Deno.KvKeyPart };
+export type DataObject = { [key: string & Deno.KvKeyPart]: Deno.KvKeyPart };
 
 /**
  * A description of something that can be stored in the db.
  */
-export interface Entity<T extends DataType> {
+export interface Entity<T extends DataObject> {
   /** For example "person", "invoice", or "product" */
   id: string;
 
@@ -92,7 +75,7 @@ export interface Entity<T extends DataType> {
  * @param Es The ids of the entities that can be stored in the db.
  * @param Ts The types of the entities that can be stored in the db.
  */
-export interface DbConfig<Es extends string, Ts extends DataType> {
+export interface DbConfig<Es extends string, Ts extends DataObject> {
   /** The path to the file where the db is stored. If undefined, the default db is used. */
   dbFilePath?: string;
   /**
@@ -126,7 +109,7 @@ export type DbConnectionCallback<T> = (db: Deno.Kv) => Promise<T> | T;
 /**
  * Defines a db, and how to store entities in it.
  */
-export class Db<Es extends string, Ts extends DataType> {
+export class Db<Es extends string, Ts extends DataObject> {
   constructor(private readonly config: DbConfig<Es, Ts>) {}
 
   async doWithConnection<T extends void | undefined | Ts | Ts[]>(
@@ -149,7 +132,11 @@ export class Db<Es extends string, Ts extends DataType> {
   async save<T extends Ts>(entity: Entity<T>, value: T): Promise<void> {
     const keys: Deno.KvKey[] = this.getAllKeys(entity, value);
     await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
-      await saveToMultipleKeys(connection, keys, value);
+      const atomic = connection.atomic();
+      for (const key of keys) {
+        atomic.set(key, value);
+      }
+      await atomic.commit();
     });
   }
 
@@ -195,7 +182,7 @@ export class Db<Es extends string, Ts extends DataType> {
     return await this.doWithConnection(
       [] as T[],
       async (connection: Deno.Kv) => {
-        const iterator: Deno.KvListIterator<T> = await connection.list<T>({
+        const iterator: Deno.KvListIterator<T> = connection.list<T>({
           prefix: key,
         });
         const entries: Deno.KvEntry<T>[] = await awaitAsyncIterableIterator(
