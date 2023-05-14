@@ -56,26 +56,28 @@ interface EntityKeys {
  *
  * All the keys and values we care about are related to the db keys, so must be of type Deno.KvKeyPart.
  */
-export type DataObject<T> = {
-  [K in keyof T]: K extends Deno.KvKeyPart ? (
-      T[K] extends Deno.KvKeyPart ? T[K]
-        : T[K] extends DataObject<T[K]> ? T[K]
-        : never
-    )
-    : never;
-};
+export type DataObject<T extends DataObject<T>> =
+  & {
+    _entityId: EntityIdOf<T>;
+  }
+  & {
+    [K in keyof T]: K extends Deno.KvKeyPart ? (
+        T[K] extends Deno.KvKeyPart ? T[K] : never
+      )
+      : never;
+  };
 
 type EntityId = Deno.KvKeyPart & string;
+type EntityIdOf<T extends DataObject<T>> = T["_entityId"];
 
 /**
  * A description of something that can be stored in the db.
  */
 export interface Entity<
-  I extends EntityId,
   T extends DataObject<T>,
 > {
   /** For example "person", "invoice", or "product" */
-  id: I;
+  id: EntityId & T["_entityId"];
 
   /** For example ["ssn", "emailAddress"]. These must be properties of T. */
   uniqueProperties: Array<keyof T>;
@@ -86,12 +88,10 @@ export interface Entity<
 
 /**
  * Defines a db, and how to store entities in it.
- * @param Es The ids of the entities that can be stored in the db.
  * @param Ts The types of the entities that can be stored in the db.
  */
 export interface DbConfig<
-  SupportedEntityIds extends EntityId,
-  SupportedDataTypes extends DataObject<SupportedDataTypes>,
+  T extends DataObject<T>,
 > {
   /** The path to the file where the db is stored. If undefined, the default db is used. */
   dbFilePath?: string;
@@ -119,10 +119,9 @@ export interface DbConfig<
    * }
    */
   entities: {
-    [I in SupportedEntityIds]: Entity<
-      I,
-      SupportedDataTypes
-    >;
+    [I in T["_entityId"] as EntityId]:
+      & Entity<T>
+      & { id: I };
   };
 }
 
@@ -132,15 +131,14 @@ type DbConnectionCallback<T> = (db: Deno.Kv) => Promise<T> | T;
  * Defines a db, and how to store entities in it.
  */
 export class Db<
-  SupportedEntityIds extends EntityId,
-  SupportedDataTypes extends DataObject<SupportedDataTypes>,
+  Ts extends DataObject<Ts>,
 > {
   /**
    * Configure a db.
    * @param config
    */
   constructor(
-    private config: DbConfig<SupportedEntityIds, SupportedDataTypes>,
+    private config: DbConfig<Ts>,
   ) {}
 
   /**
@@ -148,8 +146,8 @@ export class Db<
    * @param entity The entity to save the value for.
    * @param value The value to save.
    */
-  async save<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
+  async save<T extends Ts>(
+    entity: Entity<T>,
     value: T,
   ): Promise<void> {
     const keys: Deno.KvKey[] = this.getAllKeys(entity, value);
@@ -162,9 +160,7 @@ export class Db<
     });
   }
 
-  async clearEntity<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
-  ): Promise<void> {
+  async clearEntity<T extends Ts>(entity: Entity<T>): Promise<void> {
     const keys: Deno.KvKey[] = this.getAllKeys(entity, {} as T);
     await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
@@ -178,12 +174,12 @@ export class Db<
   async clearAllEntities(): Promise<void> {
     await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
-      const entities: Entity<SupportedEntityIds, SupportedDataTypes>[] = Object
+      const entities: Entity<Ts>[] = Object
         .values(this.config.entities);
       for (const entity of entities) {
         const keys: Deno.KvKey[] = this.getAllKeys(
           entity,
-          {} as SupportedDataTypes,
+          {} as Ts,
         );
         for (const key of keys) {
           atomic.delete(key);
@@ -200,8 +196,8 @@ export class Db<
    * @param uniquePropertyValue The unique property value to find the value for.
    * @returns the value, or undefined if not found at the given key.
    */
-  async find<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
+  async find<T extends Ts>(
+    entity: Entity<T>,
     uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
   ): Promise<T | undefined> {
@@ -224,8 +220,8 @@ export class Db<
    * @param entity The entity to find values for.
    * @param nonUniquePropertyChain The non-unique property chain to find values for.
    */
-  async findAll<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
+  async findAll<T extends Ts>(
+    entity: Entity<T>,
     nonUniquePropertyChain: Array<Deno.KvKeyPart & keyof T>,
   ): Promise<T[]> {
     const key: Deno.KvKey = this.getNonUniqueKey(
@@ -247,7 +243,7 @@ export class Db<
   }
 
   private async doWithConnection<
-    T extends void | undefined | SupportedDataTypes | SupportedDataTypes[],
+    T extends void | undefined | Ts | Ts[],
   >(
     _expectedReturnType: T,
     fn: DbConnectionCallback<T>,
@@ -266,8 +262,8 @@ export class Db<
    * @param value The value to calculate the keys for.
    * @private
    */
-  private getAllKeys<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
+  private getAllKeys<T extends Ts>(
+    entity: Entity<T>,
     value: T,
   ): Deno.KvKey[] {
     return [
@@ -282,8 +278,8 @@ export class Db<
    * @param value The value to calculate the keys for.
    * @private
    */
-  private getUniqueKeys<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
+  private getUniqueKeys<T extends Ts>(
+    entity: Entity<T>,
     value: T,
   ): Deno.KvKey[] {
     return entity.uniqueProperties.map((
@@ -300,8 +296,8 @@ export class Db<
    * @param uniquePropertyValue The unique property value to calculate the key for.
    * @private
    */
-  private getUniqueKey<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
+  private getUniqueKey<T extends Ts>(
+    entity: Entity<T>,
     uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
   ): Deno.KvKey {
@@ -318,8 +314,8 @@ export class Db<
    * @param entity The entity to calculate the keys for.
    * @private
    */
-  private getNonUniqueKeys<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
+  private getNonUniqueKeys<T extends Ts>(
+    entity: Entity<T>,
   ): Deno.KvKey[] {
     return entity.nonUniqueLookupPropertyChains.map((
       propertyChain: (keyof T)[],
@@ -332,8 +328,8 @@ export class Db<
    * @param propertyChain The property chain to calculate the key for.
    * @private
    */
-  private getNonUniqueKey<T extends SupportedDataTypes>(
-    entity: Entity<SupportedEntityIds, T>,
+  private getNonUniqueKey<T extends Ts>(
+    entity: Entity<T>,
     propertyChain: (keyof T)[],
   ): Deno.KvKey {
     return [

@@ -8,62 +8,60 @@ import { DataObject, Db, Entity } from "../src/db.ts";
 
 const TEST_PREFIX: string[] = [import.meta.url];
 
-const ENTITY_PERSON: Entity<"person", Person> = {
+const ENTITY_PERSON: Entity<Person> = {
   id: "person",
   uniqueProperties: ["ssn", "email"],
   nonUniqueLookupPropertyChains: [
     ["lastname", "firstname"],
     ["country", "zipcode"],
   ],
-} as Entity<"person", Person>;
+} as Entity<Person>;
 
-const ENTITY_INVOICE: Entity<"invoice", Invoice> = {
+const ENTITY_INVOICE: Entity<Invoice> = {
   id: "invoice",
   uniqueProperties: ["invoiceNumber"],
   nonUniqueLookupPropertyChains: [
     ["customerEmail"],
   ],
-} as Entity<"invoice", Invoice>;
+} as Entity<Invoice>;
 
 const MY_ENTITIES: {
-  person: Entity<"person", Person>;
-  invoice: Entity<"invoice", Invoice>;
+  person: Entity<Person>;
+  invoice: Entity<Invoice>;
 } = {
-  person: ENTITY_PERSON,
-  invoice: ENTITY_INVOICE,
+  person: ENTITY_PERSON as Entity<Person>,
+  invoice: ENTITY_INVOICE as Entity<Invoice>,
 } as {
-  person: Entity<"person", Person>;
-  invoice: Entity<"invoice", Invoice>;
+  person: Entity<Person>;
+  invoice: Entity<Invoice>;
 };
 
 class Person implements DataObject<Person> {
-  readonly _dataTypeId = "person";
+  readonly _entityId = "person";
   constructor(
-    public ssn: string,
-    public email: string,
-    public firstname: string,
-    public lastname: string,
-    public country: string,
-    public zipcode: string,
+    public readonly ssn: string,
+    public readonly email: string,
+    public readonly firstname: string,
+    public readonly lastname: string,
+    public readonly country: string,
+    public readonly zipcode: string,
   ) {}
 }
 
 class Invoice implements DataObject<Invoice> {
-  readonly _dataTypeId = "invoice";
+  readonly _entityId = "invoice";
   constructor(
-    public invoiceNumber: string,
-    public customerEmail: string,
+    public readonly invoiceNumber: string,
+    public readonly customerEmail: string,
   ) {}
 }
 
 let db: Db<
-  "person" | "invoice",
   Person | Invoice
 >;
 
 beforeEach(() => {
   db = new Db<
-    "person" | "invoice",
     Person | Invoice
   >({
     prefix: TEST_PREFIX,
