@@ -38,6 +38,25 @@ export type DataObject<
 type EntityId = Deno.KvKeyPart & string;
 
 /**
+ * A tuple:
+ *  The first element is a property name from T.
+ *  The second element is the value of that property.
+ *
+ * T must be a DataObject.
+ * K is the property of T.
+ * T[K] is the type of the value at the property K.
+ * The Entity<T>, which is calculated by ExtractEntityType<T>, must have the property K in its nonUniqueLookupPropertyChains.
+ */
+type PropertyLookupPair<
+  K extends ExtractEntityType<
+    T
+  >["nonUniqueLookupPropertyChains"][number][number],
+  T extends DataObject<T>,
+> =
+  & Deno.KvKey
+  & [K, T[K]];
+
+/**
  * A description of something that can be stored in the db.
  */
 export interface Entity<T extends DataObject<T>> {
@@ -50,8 +69,8 @@ export interface Entity<T extends DataObject<T>> {
   /** For example ["ssn", "emailAddress"]. These must be properties of T. */
   uniqueProperties: Array<keyof T>;
 
-  /** For example [["lastname", "firstname"], ["country", "zipcode"]]. These must be chains of properties on T. */
-  nonUniqueLookupPropertyChains: Array<keyof T>[];
+  /** For example [["lastname", "firstname"], ["country", "zipcode"]]. These must be chains of properties on T. They will be used to construct Deno.KvKey's, for example ["lastname", "Smith", "firstname", "Alice"] */
+  nonUniqueLookupPropertyChains: Array<Array<keyof T>>;
 }
 
 type ExtractDataObjectType<E> = E extends Entity<infer T> ? T : never;
@@ -199,15 +218,20 @@ export class Db<
   /**
    * Find all entity values in the db, that match the given non-unique property chain.
    * @param entityId The id of the entity to find.
-   * @param nonUniquePropertyChain The non-unique property chain to find values for.
+   * @param propertyLookupKey The non-unique property chain to find values for.
    */
-  async findAll<T extends Ts>(
+  async findAll<
+    T extends Ts,
+    K extends ExtractEntityType<
+      T
+    >["nonUniqueLookupPropertyChains"][number][number],
+  >(
     entityId: ExtractEntityId<T>,
-    nonUniquePropertyChain: Array<Deno.KvKeyPart & keyof T>,
+    propertyLookupKey: PropertyLookupPair<K, T>[],
   ): Promise<T[]> {
     const key: Deno.KvKey = this.getNonUniqueKey(
       entityId,
-      nonUniquePropertyChain,
+      propertyLookupKey,
     );
     return await this.doWithConnection(
       [] as T[],
@@ -251,7 +275,7 @@ export class Db<
   ): Deno.KvKey[] {
     return [
       ...this.getUniqueKeys(entityId, value),
-      ...this.getNonUniqueKeys(entityId),
+      ...this.getNonUniqueKeys(entityId, value),
     ];
   }
 
@@ -301,37 +325,57 @@ export class Db<
   /**
    * Calculate all the non-unique keys that an entity's values are stored at.
    * @param entityId The id of the entity to calculate the keys for.
+   * @param value The value to calculate the keys for.
    * @private
    */
   private getNonUniqueKeys<
     T extends Ts,
   >(
     entityId: ExtractEntityId<T>,
+    value: T,
   ): Deno.KvKey[] {
     const entity: Entity<T> = this.config
       .entities[entityId] as unknown as Entity<T>;
-    return entity.nonUniqueLookupPropertyChains.map((
-      propertyChain: (keyof T)[],
-    ) => this.getNonUniqueKey(entityId, propertyChain));
+    const chains: Array<Array<keyof T>> = entity.nonUniqueLookupPropertyChains;
+    const result: Deno.KvKey[] = [];
+    for (const properties of chains) {
+      const propertyLookupPairs = properties.map((property: keyof T) =>
+        [
+          property,
+          value[property],
+        ] as PropertyLookupPair<
+          ExtractEntityType<T>["nonUniqueLookupPropertyChains"][number][number],
+          T
+        >
+      );
+      const key: Deno.KvKey = this.getNonUniqueKey(
+        entityId,
+        propertyLookupPairs,
+      );
+      result.push(key);
+    }
+    return result;
   }
 
   /**
    * Calculate the non-unique key that an entity value is stored at.
    * @param entityId The id of the entity to calculate the key for.
-   * @param propertyChain The property chain to calculate the key for.
+   * @param propertyLookupPairs
    * @private
    */
   private getNonUniqueKey<
     T extends Ts,
-    I extends Entity<T>["id"],
+    K extends ExtractEntityType<
+      T
+    >["nonUniqueLookupPropertyChains"][number][number],
   >(
-    entityId: I,
-    propertyChain: (keyof T)[],
+    entityId: ExtractEntityId<T>,
+    propertyLookupPairs: PropertyLookupPair<K, T>[],
   ): Deno.KvKey {
     return [
       ...(this.config.prefix ?? []),
       entityId,
-      ...propertyChain,
+      ...propertyLookupPairs.flat(),
     ] as Deno.KvKey;
   }
 }

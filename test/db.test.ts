@@ -87,4 +87,54 @@ describe("db", () => {
       eq(actual, invoice);
     });
   });
+  describe("findAll", () => {
+    it("should find all Persons", async () => {
+      const person1: Person = {
+        ssn: "123-45-6789",
+        email: "alice@example.com",
+        firstname: "Alice",
+        lastname: "Smith",
+        country: "US",
+        zipcode: "12345",
+      };
+      const person2: Person = {
+        ssn: "987-65-4321",
+        email: "bob@example.com",
+        firstname: "Bob",
+        lastname: "Jones",
+        country: "US",
+        zipcode: "12345",
+      };
+      await db.save("person", person1);
+      await db.save("person", person2);
+      const actual: Person[] = await db.findAll("person", [[
+        "zipcode",
+        "12345",
+      ]]);
+      eq(actual, [person1, person2]);
+    });
+
+    it("should find only all Alice's Invoices", async () => {
+      const invoice1: Invoice = {
+        invoiceNumber: "123",
+        customerEmail: "alice@example.com",
+      };
+      const invoice2: Invoice = {
+        invoiceNumber: "456",
+        customerEmail: "alice@example.com",
+      };
+      const invoice3: Invoice = {
+        invoiceNumber: "789",
+        customerEmail: "bob@example.com",
+      };
+      await db.save("invoice", invoice1);
+      await db.save("invoice", invoice2);
+      await db.save("invoice", invoice3);
+      const actual: Invoice[] = await db.findAll("invoice", [[
+        "customerEmail",
+        "alice@example.com",
+      ]]);
+      eq(actual, [invoice1, invoice2]);
+    });
+  });
 });
