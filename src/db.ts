@@ -5,26 +5,26 @@ const VOID: void = undefined as void;
 
 // TODO: manipulate single property of T, under several keys, as one transaction
 
-/**
- * Mutate a value in the db.
- * @param connection The db connection.
- * @param key The key to the value to mutate.
- * @param fn The function to mutate the value with. Return the mutated value.
- * @returns true if the value was mutated, false if the value was not found.
- */
-async function mutateValue<T extends DataObject>(
-  connection: Deno.Kv,
-  key: Deno.KvKey,
-  fn: (value: T) => Promise<T> | T,
-): Promise<boolean> {
-  const entry: Deno.KvEntryMaybe<T> = await connection.get<T>(key);
-  if (!entry.versionstamp) {
-    return false;
-  }
-  const newValue: T = await fn(entry.value);
-  connection.atomic().check(entry).set(key, newValue).commit();
-  return true;
-}
+// /**
+//  * Mutate a value in the db.
+//  * @param connection The db connection.
+//  * @param key The key to the value to mutate.
+//  * @param fn The function to mutate the value with. Return the mutated value.
+//  * @returns true if the value was mutated, false if the value was not found.
+//  */
+// async function mutateValue<T extends DataObject<T>>(
+//   connection: Deno.Kv,
+//   key: Deno.KvKey,
+//   fn: (value: T) => Promise<T> | T,
+// ): Promise<boolean> {
+//   const entry: Deno.KvEntryMaybe<T> = await connection.get<T>(key);
+//   if (!entry.versionstamp) {
+//     return false;
+//   }
+//   const newValue: T = await fn(entry.value);
+//   connection.atomic().check(entry).set(key, newValue).commit();
+//   return true;
+// }
 
 /**
  * The keys that we store an entity under.
@@ -53,21 +53,35 @@ interface EntityKeys {
 
 /**
  * Type of some data object, that can be stored in the db.
+ *
+ * All the keys and values we care about are related to the db keys, so must be of type Deno.KvKeyPart.
  */
-export type DataObject = { [key: string & Deno.KvKeyPart]: Deno.KvKeyPart };
+export type DataObject<T> = {
+  [K in keyof T]: K extends Deno.KvKeyPart ? (
+      T[K] extends Deno.KvKeyPart ? T[K]
+        : T[K] extends DataObject<T[K]> ? T[K]
+        : never
+    )
+    : never;
+};
+
+type EntityId = Deno.KvKeyPart & string;
 
 /**
  * A description of something that can be stored in the db.
  */
-export interface Entity<T extends DataObject> {
+export interface Entity<
+  I extends EntityId,
+  T extends DataObject<T>,
+> {
   /** For example "person", "invoice", or "product" */
-  id: string;
+  id: I;
 
   /** For example ["ssn", "emailAddress"]. These must be properties of T. */
-  uniqueProperties: Array<Deno.KvKeyPart & keyof T>;
+  uniqueProperties: Array<keyof T>;
 
   /** For example [["lastname", "firstname"], ["country", "zipcode"]]. These must be chains of properties on T. */
-  nonUniqueLookupPropertyChains: Array<Array<Deno.KvKeyPart & keyof T>>;
+  nonUniqueLookupPropertyChains: Array<Array<keyof T>>;
 }
 
 /**
@@ -75,9 +89,14 @@ export interface Entity<T extends DataObject> {
  * @param Es The ids of the entities that can be stored in the db.
  * @param Ts The types of the entities that can be stored in the db.
  */
-export interface DbConfig<Es extends string, Ts extends DataObject> {
+export interface DbConfig<
+  SupportedEntityIds extends EntityId,
+  SupportedDataTypes extends DataObject<SupportedDataTypes>,
+> {
   /** The path to the file where the db is stored. If undefined, the default db is used. */
   dbFilePath?: string;
+  /** The prefix to use for all keys in the db. */
+  prefix?: Deno.KvKey;
   /**
    * The entities that can be stored in the db.
    * Example: {
@@ -100,7 +119,10 @@ export interface DbConfig<Es extends string, Ts extends DataObject> {
    * }
    */
   entities: {
-    [K in Es]: Entity<Ts> & { id: K };
+    [I in SupportedEntityIds]: Entity<
+      I,
+      SupportedDataTypes
+    >;
   };
 }
 
@@ -109,15 +131,27 @@ type DbConnectionCallback<T> = (db: Deno.Kv) => Promise<T> | T;
 /**
  * Defines a db, and how to store entities in it.
  */
-export class Db<Es extends string, Ts extends DataObject> {
-  constructor(private readonly config: DbConfig<Es, Ts>) {}
+export class Db<
+  SupportedEntityIds extends EntityId,
+  SupportedDataTypes extends DataObject<SupportedDataTypes>,
+> {
+  /**
+   * Configure a db.
+   * @param config
+   */
+  constructor(
+    private config: DbConfig<SupportedEntityIds, SupportedDataTypes>,
+  ) {}
 
   /**
    * Save an entity value to the db.
    * @param entity The entity to save the value for.
    * @param value The value to save.
    */
-  async save<T extends Ts>(entity: Entity<T>, value: T): Promise<void> {
+  async save<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
+    value: T,
+  ): Promise<void> {
     const keys: Deno.KvKey[] = this.getAllKeys(entity, value);
     await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
@@ -128,6 +162,37 @@ export class Db<Es extends string, Ts extends DataObject> {
     });
   }
 
+  async clearEntity<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
+  ): Promise<void> {
+    const keys: Deno.KvKey[] = this.getAllKeys(entity, {} as T);
+    await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
+      const atomic = connection.atomic();
+      for (const key of keys) {
+        atomic.delete(key);
+      }
+      await atomic.commit();
+    });
+  }
+
+  async clearAllEntities(): Promise<void> {
+    await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
+      const atomic = connection.atomic();
+      const entities: Entity<SupportedEntityIds, SupportedDataTypes>[] = Object
+        .values(this.config.entities);
+      for (const entity of entities) {
+        const keys: Deno.KvKey[] = this.getAllKeys(
+          entity,
+          {} as SupportedDataTypes,
+        );
+        for (const key of keys) {
+          atomic.delete(key);
+        }
+        await atomic.commit();
+      }
+    });
+  }
+
   /**
    * Find an entity value in the db.
    * @param entity The entity to find the value for.
@@ -135,9 +200,9 @@ export class Db<Es extends string, Ts extends DataObject> {
    * @param uniquePropertyValue The unique property value to find the value for.
    * @returns the value, or undefined if not found at the given key.
    */
-  async find<T extends Ts>(
-    entity: Entity<T>,
-    uniquePropertyName: Deno.KvKeyPart & keyof T,
+  async find<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
+    uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
   ): Promise<T | undefined> {
     const key: Deno.KvKey = this.getUniqueKey(
@@ -159,8 +224,8 @@ export class Db<Es extends string, Ts extends DataObject> {
    * @param entity The entity to find values for.
    * @param nonUniquePropertyChain The non-unique property chain to find values for.
    */
-  async findAll<T extends Ts>(
-    entity: Entity<T>,
+  async findAll<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
     nonUniquePropertyChain: Array<Deno.KvKeyPart & keyof T>,
   ): Promise<T[]> {
     const key: Deno.KvKey = this.getNonUniqueKey(
@@ -181,7 +246,9 @@ export class Db<Es extends string, Ts extends DataObject> {
     );
   }
 
-  private async doWithConnection<T extends void | undefined | Ts | Ts[]>(
+  private async doWithConnection<
+    T extends void | undefined | SupportedDataTypes | SupportedDataTypes[],
+  >(
     _expectedReturnType: T,
     fn: DbConnectionCallback<T>,
   ): Promise<T> {
@@ -199,8 +266,8 @@ export class Db<Es extends string, Ts extends DataObject> {
    * @param value The value to calculate the keys for.
    * @private
    */
-  private getAllKeys<T extends Ts>(
-    entity: Entity<T>,
+  private getAllKeys<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
     value: T,
   ): Deno.KvKey[] {
     return [
@@ -215,12 +282,12 @@ export class Db<Es extends string, Ts extends DataObject> {
    * @param value The value to calculate the keys for.
    * @private
    */
-  private getUniqueKeys<T extends Ts>(
-    entity: Entity<T>,
+  private getUniqueKeys<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
     value: T,
   ): Deno.KvKey[] {
     return entity.uniqueProperties.map((
-      uniquePropertyName: Deno.KvKeyPart & keyof T,
+      uniquePropertyName: keyof T,
     ) =>
       this.getUniqueKey(entity, uniquePropertyName, value[uniquePropertyName])
     );
@@ -233,12 +300,17 @@ export class Db<Es extends string, Ts extends DataObject> {
    * @param uniquePropertyValue The unique property value to calculate the key for.
    * @private
    */
-  private getUniqueKey<T extends Ts>(
-    entity: Entity<T>,
-    uniquePropertyName: Deno.KvKeyPart & keyof T,
+  private getUniqueKey<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
+    uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
   ): Deno.KvKey {
-    return [entity.id, uniquePropertyName, uniquePropertyValue];
+    return [
+      ...(this.config.prefix ?? []),
+      entity.id,
+      uniquePropertyName,
+      uniquePropertyValue,
+    ] as Deno.KvKey;
   }
 
   /**
@@ -246,11 +318,11 @@ export class Db<Es extends string, Ts extends DataObject> {
    * @param entity The entity to calculate the keys for.
    * @private
    */
-  private getNonUniqueKeys<T extends Ts>(
-    entity: Entity<T>,
+  private getNonUniqueKeys<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
   ): Deno.KvKey[] {
     return entity.nonUniqueLookupPropertyChains.map((
-      propertyChain: (Deno.KvKeyPart & keyof T)[],
+      propertyChain: (keyof T)[],
     ) => this.getNonUniqueKey(entity, propertyChain));
   }
 
@@ -260,10 +332,14 @@ export class Db<Es extends string, Ts extends DataObject> {
    * @param propertyChain The property chain to calculate the key for.
    * @private
    */
-  private getNonUniqueKey<T extends Ts>(
-    entity: Entity<T>,
-    propertyChain: (Deno.KvKeyPart & keyof T)[],
+  private getNonUniqueKey<T extends SupportedDataTypes>(
+    entity: Entity<SupportedEntityIds, T>,
+    propertyChain: (keyof T)[],
   ): Deno.KvKey {
-    return [entity.id, ...propertyChain];
+    return [
+      ...(this.config.prefix ?? []),
+      entity.id,
+      ...propertyChain,
+    ] as Deno.KvKey;
   }
 }
