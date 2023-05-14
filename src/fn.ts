@@ -13,6 +13,13 @@ export async function awaitAsyncIterableIterator<T>(
   return results;
 }
 
+/**
+ * Get a property from an object.
+ * @param name the name of the property to get
+ */
 export function prop<T>(name: keyof T): (obj: T) => T[keyof T] {
   return (obj: T) => obj[name];
 }
+
+/** An instance of something of the type void. */
+export const VOID: void = undefined as void;

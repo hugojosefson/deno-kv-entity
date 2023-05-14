@@ -4,85 +4,69 @@ import {
   describe,
   it,
 } from "https://deno.land/std@0.187.0/testing/bdd.ts";
-import { DataObject, Db, Entity } from "../src/db.ts";
+import { Db, Entity } from "../src/db.ts";
 
 const TEST_PREFIX: string[] = [import.meta.url];
 
 const ENTITY_PERSON: Entity<Person> = {
   id: "person",
-  uniqueProperties: ["ssn", "email"],
+  uniqueProperties: ["ssn", "email"] as Array<keyof Person>,
   nonUniqueLookupPropertyChains: [
     ["lastname", "firstname"],
     ["country", "zipcode"],
-  ],
+  ] as Array<keyof Person>[],
+  _exampleInstance: {} as Person,
 } as Entity<Person>;
 
 const ENTITY_INVOICE: Entity<Invoice> = {
   id: "invoice",
-  uniqueProperties: ["invoiceNumber"],
+  uniqueProperties: ["invoiceNumber"] as Array<keyof Invoice>,
   nonUniqueLookupPropertyChains: [
     ["customerEmail"],
-  ],
+  ] as Array<keyof Invoice>[],
+  _exampleInstance: {} as Invoice,
 } as Entity<Invoice>;
 
-const MY_ENTITIES: {
-  person: Entity<Person>;
-  invoice: Entity<Invoice>;
-} = {
-  person: ENTITY_PERSON as Entity<Person>,
-  invoice: ENTITY_INVOICE as Entity<Invoice>,
-} as {
-  person: Entity<Person>;
-  invoice: Entity<Invoice>;
-};
-
-class Person implements DataObject<Person> {
-  readonly _entityId = "person";
-  constructor(
-    public readonly ssn: string,
-    public readonly email: string,
-    public readonly firstname: string,
-    public readonly lastname: string,
-    public readonly country: string,
-    public readonly zipcode: string,
-  ) {}
+interface Person {
+  ssn: string;
+  email: string;
+  firstname: string;
+  lastname: string;
+  country: string;
+  zipcode: string;
 }
 
-class Invoice implements DataObject<Invoice> {
-  readonly _entityId = "invoice";
-  constructor(
-    public readonly invoiceNumber: string,
-    public readonly customerEmail: string,
-  ) {}
+interface Invoice {
+  invoiceNumber: string;
+  customerEmail: string;
 }
 
-let db: Db<
-  Person | Invoice
->;
+let db: Db<Person | Invoice>;
 
 beforeEach(() => {
-  db = new Db<
-    Person | Invoice
-  >({
+  db = new Db<Person | Invoice>({
     prefix: TEST_PREFIX,
-    entities: MY_ENTITIES,
+    entities: {
+      person: ENTITY_PERSON as Entity<Person>,
+      invoice: ENTITY_INVOICE as Entity<Invoice>,
+    },
   });
 });
 
 describe("db", () => {
   describe("save", () => {
     it("should put a Person", async () => {
-      const person = new Person(
-        "123-45-6789",
-        "alice@example.com",
-        "Alice",
-        "Smith",
-        "US",
-        "12345",
-      );
-      await db.save(ENTITY_PERSON, person);
-      const actual = await db.find(
-        ENTITY_PERSON,
+      const person: Person = {
+        ssn: "123-45-6789",
+        email: "alice@example.com",
+        firstname: "Alice",
+        lastname: "Smith",
+        country: "US",
+        zipcode: "12345",
+      };
+      await db.save("person", person);
+      const actual: Person | undefined = await db.find(
+        "person",
         "ssn",
         "123-45-6789",
       );
@@ -90,10 +74,13 @@ describe("db", () => {
     });
 
     it("should put an Invoice", async () => {
-      const invoice = new Invoice("123", "alice@example.com");
-      await db.save(ENTITY_INVOICE, invoice);
-      const actual = await db.find(
-        ENTITY_INVOICE,
+      const invoice: Invoice = {
+        invoiceNumber: "123",
+        customerEmail: "alice@example.com",
+      };
+      await db.save("invoice", invoice);
+      const actual: Invoice | undefined = await db.find(
+        "invoice",
         "invoiceNumber",
         "123",
       );
