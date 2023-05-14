@@ -5,5 +5,6 @@ Typed library for specifying and storing entities in a
 
 Requires Deno v1.32 or later, with the `--unstable` flag.
 
-Current status:
-[![build is](https://github.com/hugojosefson/deno-entity-on-kv/actions/workflows/deno.yaml/badge.svg)](https://github.com/hugojosefson/deno-entity-on-kv/actions/workflows/deno.yaml)
+Current build status:
+
+[![deno](https://github.com/hugojosefson/deno-entity-on-kv/actions/workflows/deno.yaml/badge.svg)](https://github.com/hugojosefson/deno-entity-on-kv/actions/workflows/deno.yaml)
