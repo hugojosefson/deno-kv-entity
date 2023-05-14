@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: denoland/setup-deno@v1
-      - name: install fd
+      - name: Install fd
         run: |
           sudo apt-get update
           sudo apt-get install -y fd-find
@@ -22,7 +22,7 @@ jobs:
       - uses: denoland/setup-deno@v1
       - run: deno fmt --check
       - run: deno lint
-      - name: install fd
+      - name: Install fd
         run: |
           sudo apt-get update
           sudo apt-get install -y fd-find
