@@ -175,12 +175,12 @@ export class Db<
     await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
       for (const prefix of this.getAllKeys(entityId)) {
-        console.error("Deleting prefix", prefix);
-        const entries: Deno.KvEntry<unknown>[] =
-          await awaitAsyncIterableIterator(connection.list({ prefix }));
-        for (const entry of entries) {
-          console.error("Deleting key", entry.key);
-          atomic.delete(entry.key);
+        const kvEntries: Deno.KvEntry<unknown>[] =
+          await awaitAsyncIterableIterator(
+            connection.list({ prefix }),
+          );
+        for (const { key } of kvEntries) {
+          atomic.delete(key);
         }
       }
       await atomic.commit();
