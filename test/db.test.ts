@@ -6,7 +6,7 @@ import {
 } from "https://deno.land/std@0.187.0/testing/bdd.ts";
 import { Db, Entity } from "../src/db.ts";
 
-const TEST_PREFIX: string[] = [import.meta.url];
+export const TEST_PREFIX: string[] = [import.meta.url];
 
 const ENTITY_PERSON: Entity<Person> = {
   id: "person",
@@ -107,11 +107,29 @@ describe("db", () => {
       };
       await db.save("person", person1);
       await db.save("person", person2);
-      const actual: Person[] = await db.findAll("person", [[
-        "zipcode",
-        "12345",
-      ]]);
-      eq(actual, [person1, person2]);
+
+      const actualPerson1: Person | undefined = await db.find(
+        "person",
+        "ssn",
+        "123-45-6789",
+      );
+      eq(actualPerson1, person1);
+
+      const actualPerson2: Person | undefined = await db.find(
+        "person",
+        "ssn",
+        "987-65-4321",
+      );
+      eq(actualPerson2, person2);
+
+      const actualPersons: Person[] = await db.findAll(
+        "person",
+        [
+          ["country", "US"],
+          ["zipcode", "12345"],
+        ],
+      );
+      eq(actualPersons, [person1, person2]);
     });
 
     it("should find only all Alice's Invoices", async () => {
