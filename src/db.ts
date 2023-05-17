@@ -162,25 +162,19 @@ export class Db<
         "Entity id must be a string. If you want to clear all entities, use clearAllEntities() instead.",
       );
     }
-    await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
-      const atomic = connection.atomic();
-      for (const prefix of this.getAllKeys(entityId)) {
-        console.error("Deleting prefix", prefix);
-        const entries: Deno.KvEntry<unknown>[] =
-          await awaitAsyncIterableIterator(connection.list({ prefix }));
-        for (const entry of entries) {
-          console.error("Deleting key", entry.key);
-          atomic.delete(entry.key);
-        }
-      }
-      await atomic.commit();
-    });
+    await this._clearEntity(entityId);
   }
 
   async clearAllEntities(): Promise<void> {
+    await this._clearEntity();
+  }
+
+  private async _clearEntity<T extends Ts | never>(
+    entityId?: ExtractEntityId<T>,
+  ): Promise<void> {
     await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
-      for (const prefix of this.getAllKeys()) {
+      for (const prefix of this.getAllKeys(entityId)) {
         console.error("Deleting prefix", prefix);
         const entries: Deno.KvEntry<unknown>[] =
           await awaitAsyncIterableIterator(connection.list({ prefix }));
