@@ -73,7 +73,6 @@ export interface Entity<T extends DataObject<T>> {
   nonUniqueLookupPropertyChains: Array<Array<keyof T>>;
 }
 
-type ExtractDataObjectType<E> = E extends Entity<infer T> ? T : never;
 type ExtractEntityType<T> = T extends DataObject<infer T> ? Entity<T> : never;
 type ExtractEntityId<T> = T extends DataObject<infer T>
   ? ExtractEntityType<T>["id"]
