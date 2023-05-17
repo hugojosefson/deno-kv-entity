@@ -1,4 +1,4 @@
-import { awaitAsyncIterableIterator, prop, VOID } from "./fn.ts";
+import { awaitAsyncIterableIterator, isKvKeyPart, prop, VOID } from "./fn.ts";
 
 /*
  * General comment about the design of this db:
@@ -218,7 +218,7 @@ export class Db<
   /**
    * Find all entity values in the db, that match the given non-unique property chain.
    * @param entityId The id of the entity to find, if any. If undefined, all entities will be searched.
-   * @param propertyLookupKey The non-unique property chain to find values for, if any. If undefined, all values for the given entity will be searched.
+   * @param propertyLookupKey The non-unique property chain to find values for, if any. If undefined, all values for the given entity will be searched. Or, the name of a non-unique property, if only one property is to be searched.
    */
   async findAll<
     T extends Ts,
@@ -227,7 +227,7 @@ export class Db<
     >["nonUniqueLookupPropertyChains"][number][number],
   >(
     entityId?: ExtractEntityId<T>,
-    propertyLookupKey?: PropertyLookupPair<K, T>[],
+    propertyLookupKey?: PropertyLookupPair<K, T>[] | K,
   ): Promise<T[]> {
     const key: Deno.KvKey = this.getNonUniqueKey(
       entityId,
@@ -367,7 +367,7 @@ export class Db<
   /**
    * Calculate the non-unique key that an entity value is stored at.
    * @param entityId The id of the entity to calculate the key for, if any. If not provided, all entities are targeted.
-   * @param propertyLookupPairs The non-unique property chain to calculate the key for, if any. If not provided, all non-unique property chains are targeted.
+   * @param propertyLookupPairs The non-unique property chain to calculate the key for, if any. If not provided, all non-unique property chains are targeted.  Or, the name of a non-unique property, if only one property is to be searched.
    * @param valueUniqueId The unique id of the value to calculate the key for. If not provided, all values are targeted.
    * @private
    */
@@ -378,7 +378,10 @@ export class Db<
     >["nonUniqueLookupPropertyChains"][number][number],
   >(
     entityId?: ExtractEntityId<T>,
-    propertyLookupPairs?: PropertyLookupPair<K, T>[],
+    propertyLookupPairs?:
+      | PropertyLookupPair<K, T>[]
+      | [...PropertyLookupPair<K, T>[], K]
+      | K,
     valueUniqueId?: Deno.KvKeyPart,
   ): Deno.KvKey {
     return [
@@ -386,7 +389,9 @@ export class Db<
       ...(typeof entityId === "undefined" ? [] : [entityId]),
       ...(typeof propertyLookupPairs === "undefined"
         ? []
-        : propertyLookupPairs.flat()),
+        : (isKvKeyPart(propertyLookupPairs)
+          ? [propertyLookupPairs]
+          : propertyLookupPairs.flat())),
       ...(typeof valueUniqueId === "undefined" ? [] : [valueUniqueId]),
     ] as Deno.KvKey;
   }

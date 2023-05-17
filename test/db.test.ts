@@ -212,4 +212,34 @@ describe("db", () => {
       eq(actual, []);
     });
   });
+  describe("clearEntity", () => {
+    it("should clear all Persons, leave Invoices", async () => {
+      const invoice1: Invoice = {
+        invoiceNumber: "123",
+        customerEmail: ALICE.email,
+      };
+      const invoice2: Invoice = {
+        invoiceNumber: "456",
+        customerEmail: BOB.email,
+      };
+      await db.save("person", ALICE);
+      await db.save("person", BOB);
+      await db.save("invoice", invoice1);
+      await db.save("invoice", invoice2);
+
+      const actualPersons = await db.findAll("person", "ssn");
+      eq(actualPersons, [ALICE, BOB]);
+
+      const actualInvoices = await db.findAll("invoice", "invoiceNumber");
+      eq(actualInvoices, [invoice1, invoice2]);
+
+      await db.clearEntity("person");
+
+      const actualPersons2 = await db.findAll("person", "ssn");
+      eq(actualPersons2, []);
+
+      const actualInvoices2 = await db.findAll("invoice", "invoiceNumber");
+      eq(actualInvoices2, [invoice1, invoice2]);
+    });
+  });
 });
