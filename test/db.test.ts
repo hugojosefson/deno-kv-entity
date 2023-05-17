@@ -1,5 +1,6 @@
 import { assertEquals as eq } from "https://deno.land/std@0.187.0/testing/asserts.ts";
 import {
+  beforeAll,
   beforeEach,
   describe,
   it,
@@ -43,7 +44,7 @@ interface Invoice {
 
 let db: Db<Person | Invoice>;
 
-beforeEach(() => {
+beforeAll(() => {
   db = new Db<Person | Invoice>({
     prefix: TEST_PREFIX,
     entities: {
@@ -51,6 +52,10 @@ beforeEach(() => {
       invoice: ENTITY_INVOICE as Entity<Invoice>,
     },
   });
+});
+
+beforeEach(async () => {
+  await db.clearAllEntities();
 });
 
 describe("db", () => {
@@ -153,6 +158,63 @@ describe("db", () => {
         "alice@example.com",
       ]]);
       eq(actual, [invoice1, invoice2]);
+    });
+  });
+  describe("empty db by default", () => {
+    it("should return undefined for a Person", async () => {
+      const actual: Person | undefined = await db.find(
+        "person",
+        "ssn",
+        "123-45-6789",
+      );
+      eq(actual, undefined);
+    });
+    it("should return undefined for an Invoice", async () => {
+      const actual: Invoice | undefined = await db.find(
+        "invoice",
+        "invoiceNumber",
+        "123",
+      );
+      eq(actual, undefined);
+    });
+    it('should return empty array for findAll("person, country, zipcode)', async () => {
+      const actual: Person[] = await db.findAll(
+        "person",
+        [
+          ["country", "US"],
+          ["zipcode", "12345"],
+        ],
+      );
+      eq(actual, []);
+    });
+    it('should return empty array for findAll("person", customerEmail)', async () => {
+      const actual: Invoice[] = await db.findAll("invoice", [[
+        "customerEmail",
+        "alice@example.com",
+      ]]);
+      eq(actual, []);
+    });
+    it('should return empty array for findAll("person")', async () => {
+      const actual: Person[] = await db.findAll("person");
+      eq(actual, []);
+    });
+    it('should return empty array for findAll("invoice")', async () => {
+      const actual: Invoice[] = await db.findAll("invoice");
+      eq(actual, []);
+    });
+    it("should return empty array for findAll()", async () => {
+      const actual: unknown[] = await db.findAll<
+        Person | Invoice,
+        | "ssn"
+        | "email"
+        | "firstname"
+        | "lastname"
+        | "country"
+        | "zipcode"
+        | "invoiceNumber"
+        | "customerEmail"
+      >();
+      eq(actual, []);
     });
   });
 });
