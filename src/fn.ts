@@ -23,3 +23,14 @@ export function prop<T>(name: keyof T): (obj: T) => T[keyof T] {
 
 /** An instance of something of the type void. */
 export const VOID: void = undefined as void;
+
+/** Whether a value is a Deno.KvKeyPart */
+export function isKvKeyPart(value: unknown): value is Deno.KvKeyPart {
+  return [
+    "string",
+    "number",
+    "bigint",
+    "boolean",
+  ].includes(typeof value) ||
+    value?.constructor === Uint8Array;
+}
