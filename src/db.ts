@@ -146,7 +146,7 @@ export class Db<
     value: T,
   ): Promise<void> {
     const keys: Deno.KvKey[] = this.getAllKeys(entityId, value);
-    await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
+    await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
       for (const key of keys) {
         atomic.set(key, value);
@@ -159,7 +159,7 @@ export class Db<
     entityId: ExtractEntityId<T>,
   ): Promise<void> {
     const keys: Deno.KvKey[] = this.getAllKeys(entityId, {} as T);
-    await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
+    await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
       for (const key of keys) {
         atomic.delete(key);
@@ -169,7 +169,7 @@ export class Db<
   }
 
   async clearAllEntities(): Promise<void> {
-    await this.doWithConnection(VOID, async (connection: Deno.Kv) => {
+    await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
       const entityIds: ExtractEntityId<Ts>[] = Object.keys(
         this.config.entities,
@@ -206,7 +206,7 @@ export class Db<
       uniquePropertyName,
       uniquePropertyValue,
     );
-    return await this.doWithConnection(
+    return await this._doWithConnection(
       {} as T | undefined,
       async (connection: Deno.Kv) => {
         const entry: Deno.KvEntryMaybe<T> = await connection.get<T>(key);
@@ -233,7 +233,7 @@ export class Db<
       entityId,
       propertyLookupKey,
     );
-    return await this.doWithConnection(
+    return await this._doWithConnection(
       [] as T[],
       async (connection: Deno.Kv) => {
         const iterator: Deno.KvListIterator<T> = connection.list<T>({
@@ -247,7 +247,7 @@ export class Db<
     );
   }
 
-  private async doWithConnection<
+  async _doWithConnection<
     T extends void | undefined | Ts | Ts[],
   >(
     _expectedReturnType: T,
@@ -351,6 +351,7 @@ export class Db<
       const key: Deno.KvKey = this.getNonUniqueKey(
         entityId,
         propertyLookupPairs,
+        value[entity.uniqueProperties[0]] as Deno.KvKeyPart,
       );
       result.push(key);
     }
@@ -361,6 +362,7 @@ export class Db<
    * Calculate the non-unique key that an entity value is stored at.
    * @param entityId The id of the entity to calculate the key for.
    * @param propertyLookupPairs
+   * @param valueUniqueId The unique id of the value to calculate the key for. If not provided, all values are targeted.
    * @private
    */
   private getNonUniqueKey<
@@ -371,11 +373,13 @@ export class Db<
   >(
     entityId: ExtractEntityId<T>,
     propertyLookupPairs: PropertyLookupPair<K, T>[],
+    valueUniqueId?: Deno.KvKeyPart,
   ): Deno.KvKey {
     return [
       ...(this.config.prefix ?? []),
       entityId,
       ...propertyLookupPairs.flat(),
+      ...(typeof valueUniqueId === "undefined" ? [] : [valueUniqueId]),
     ] as Deno.KvKey;
   }
 }
