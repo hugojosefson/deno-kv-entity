@@ -42,6 +42,24 @@ interface Invoice {
   customerEmail: string;
 }
 
+const ALICE: Person = {
+  ssn: "123-45-6789",
+  email: "alice@example.com",
+  firstname: "Alice",
+  lastname: "Smith",
+  country: "US",
+  zipcode: "12345",
+} as const;
+
+const BOB: Person = {
+  ssn: "987-65-4321",
+  email: "bob@example.com",
+  firstname: "Bob",
+  lastname: "Jones",
+  country: "US",
+  zipcode: "12345",
+} as const;
+
 let db: Db<Person | Invoice>;
 
 beforeAll(() => {
@@ -61,19 +79,12 @@ beforeEach(async () => {
 describe("db", () => {
   describe("save", () => {
     it("should put a Person", async () => {
-      const person: Person = {
-        ssn: "123-45-6789",
-        email: "alice@example.com",
-        firstname: "Alice",
-        lastname: "Smith",
-        country: "US",
-        zipcode: "12345",
-      };
+      const person: Person = ALICE;
       await db.save("person", person);
       const actual: Person | undefined = await db.find(
         "person",
         "ssn",
-        "123-45-6789",
+        ALICE.ssn,
       );
       eq(actual, person);
     });
@@ -81,7 +92,7 @@ describe("db", () => {
     it("should put an Invoice", async () => {
       const invoice: Invoice = {
         invoiceNumber: "123",
-        customerEmail: "alice@example.com",
+        customerEmail: ALICE.email,
       };
       await db.save("invoice", invoice);
       const actual: Invoice | undefined = await db.find(
@@ -94,38 +105,22 @@ describe("db", () => {
   });
   describe("findAll", () => {
     it("should find all Persons", async () => {
-      const person1: Person = {
-        ssn: "123-45-6789",
-        email: "alice@example.com",
-        firstname: "Alice",
-        lastname: "Smith",
-        country: "US",
-        zipcode: "12345",
-      };
-      const person2: Person = {
-        ssn: "987-65-4321",
-        email: "bob@example.com",
-        firstname: "Bob",
-        lastname: "Jones",
-        country: "US",
-        zipcode: "12345",
-      };
-      await db.save("person", person1);
-      await db.save("person", person2);
+      await db.save("person", ALICE);
+      await db.save("person", BOB);
 
       const actualPerson1: Person | undefined = await db.find(
         "person",
         "ssn",
-        "123-45-6789",
+        ALICE.ssn,
       );
-      eq(actualPerson1, person1);
+      eq(actualPerson1, ALICE);
 
       const actualPerson2: Person | undefined = await db.find(
         "person",
         "ssn",
-        "987-65-4321",
+        BOB.ssn,
       );
-      eq(actualPerson2, person2);
+      eq(actualPerson2, BOB);
 
       const actualPersons: Person[] = await db.findAll(
         "person",
@@ -134,28 +129,28 @@ describe("db", () => {
           ["zipcode", "12345"],
         ],
       );
-      eq(actualPersons, [person1, person2]);
+      eq(actualPersons, [ALICE, BOB]);
     });
 
     it("should find only all Alice's Invoices", async () => {
       const invoice1: Invoice = {
         invoiceNumber: "123",
-        customerEmail: "alice@example.com",
+        customerEmail: ALICE.email,
       };
       const invoice2: Invoice = {
         invoiceNumber: "456",
-        customerEmail: "alice@example.com",
+        customerEmail: ALICE.email,
       };
       const invoice3: Invoice = {
         invoiceNumber: "789",
-        customerEmail: "bob@example.com",
+        customerEmail: BOB.email,
       };
       await db.save("invoice", invoice1);
       await db.save("invoice", invoice2);
       await db.save("invoice", invoice3);
       const actual: Invoice[] = await db.findAll("invoice", [[
         "customerEmail",
-        "alice@example.com",
+        ALICE.email,
       ]]);
       eq(actual, [invoice1, invoice2]);
     });
@@ -165,7 +160,7 @@ describe("db", () => {
       const actual: Person | undefined = await db.find(
         "person",
         "ssn",
-        "123-45-6789",
+        ALICE.ssn,
       );
       eq(actual, undefined);
     });
@@ -190,7 +185,7 @@ describe("db", () => {
     it('should return empty array for findAll("person", customerEmail)', async () => {
       const actual: Invoice[] = await db.findAll("invoice", [[
         "customerEmail",
-        "alice@example.com",
+        ALICE.email,
       ]]);
       eq(actual, []);
     });
