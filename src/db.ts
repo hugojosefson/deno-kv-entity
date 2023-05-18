@@ -1,17 +1,21 @@
 import { awaitAsyncIterableIterator, isKvKeyPart, prop, VOID } from "./fn.ts";
 
 /*
- * General comment about the design of this db:
+ * General comment about the design of this EntityDb:
  *
- * unique denotes a key that can be used to look up a single entity.
- * nonUnique denotes a key that can be used to lookup multiple entities.
+ * uniqueProperty is related to a Deno.KvKey that can be used to look up a single Entity instance.
+ * indexedPropertyChain is related to a Deno.KvKey that can be used to lookup multiple Entity instances.
  *
- * A value is stored directly on each of the unique keys.
- * For each nonUnique key, the key to store the value at, is calculated as: [...nonUniqueKey, entity.uniqueProperties[0]].
+ * An Entity instance is stored directly on each of the unique Deno.KvKey's derived from its uniqueProperties.
+ * For each indexedPropertyChain, the Deno.KvKey to store the Entity instance at, is calculated as:
+ * [
+ *   ...indexedPropertyChain.flatMap(prop => [prop, entityInstance[prop]]),
+ *   Entity.uniqueProperties[0]
+ * ].
  *
  * For example, if we have an entity with id "person", and
  * uniqueProperties ["ssn", "emailAddress"], and
- * nonUniqueLookupPropertyChains [["lastname", "firstname"], ["country", "zipcode"]], then
+ * indexedPropertyChains [["lastname", "firstname"], ["country", "zipcode"]], then
  * we store the value at the following keys:
  * - ["person", "ssn", "123456789"]
  * - ["person", "emailAddress", "alice@example.com"]
@@ -38,6 +42,12 @@ export type DataObject<
 type EntityId = Deno.KvKeyPart & string;
 
 /**
+ * A property on T, that is used to look up multiple instances of T. Will possibly be followed by a value of that property, to form part of a Deno.KvKey.
+ */
+type IndexedProperty<T extends DataObject<T>> = ExtractEntityType<
+  T
+>["indexedPropertyChains"][number][number];
+/**
  * A tuple:
  *  The first element is a property name from T.
  *  The second element is the value of that property.
@@ -45,12 +55,9 @@ type EntityId = Deno.KvKeyPart & string;
  * T must be a DataObject.
  * K is the property of T.
  * T[K] is the type of the value at the property K.
- * The Entity<T>, which is calculated by ExtractEntityType<T>, must have the property K in its nonUniqueLookupPropertyChains.
  */
 type PropertyLookupPair<
-  K extends ExtractEntityType<
-    T
-  >["nonUniqueLookupPropertyChains"][number][number],
+  K extends IndexedProperty<T>,
   T extends DataObject<T>,
 > =
   & Deno.KvKey
@@ -70,7 +77,7 @@ export interface Entity<T extends DataObject<T>> {
   uniqueProperties: Array<keyof T>;
 
   /** For example [["lastname", "firstname"], ["country", "zipcode"]]. These must be chains of properties on T. They will be used to construct Deno.KvKey's, for example ["lastname", "Smith", "firstname", "Alice"] */
-  nonUniqueLookupPropertyChains: Array<Array<keyof T>>;
+  indexedPropertyChains: Array<Array<keyof T>>;
 }
 
 type ExtractEntityType<T> = T extends DataObject<infer T> ? Entity<T> : never;
@@ -95,7 +102,7 @@ export interface DbConfig<
    *   person: {
    *     id: "person",
    *     uniqueProperties: ["ssn", "emailAddress"],
-   *     nonUniqueLookupPropertyChains: [
+   *     indexedPropertyChains: [
    *       ["lastname", "firstname"],
    *       ["country", "zipcode"]
    *     ]
@@ -103,7 +110,7 @@ export interface DbConfig<
    *   invoice: {
    *     id: "invoice",
    *     uniqueProperties: ["invoiceNumber"],
-   *     nonUniqueLookupPropertyChains: [
+   *     indexedPropertyChains: [
    *       ["customer", "lastname", "firstname"],
    *       ["customer", "country", "zipcode"]
    *     ]
@@ -222,9 +229,7 @@ export class Db<
    */
   async findAll<
     T extends Ts,
-    K extends ExtractEntityType<
-      T
-    >["nonUniqueLookupPropertyChains"][number][number],
+    K extends IndexedProperty<T>,
   >(
     entityId?: ExtractEntityId<T>,
     propertyLookupKey?: PropertyLookupPair<K, T>[] | K,
@@ -342,7 +347,7 @@ export class Db<
   ): Deno.KvKey[] {
     const entity: Entity<T> = this.config
       .entities[entityId] as unknown as Entity<T>;
-    const chains: Array<Array<keyof T>> = entity.nonUniqueLookupPropertyChains;
+    const chains: Array<Array<keyof T>> = entity.indexedPropertyChains;
     const result: Deno.KvKey[] = [];
     for (const properties of chains) {
       const propertyLookupPairs = properties.map((property: keyof T) =>
@@ -350,8 +355,8 @@ export class Db<
           property,
           value[property],
         ] as PropertyLookupPair<
-          ExtractEntityType<T>["nonUniqueLookupPropertyChains"][number][number],
-          T
+          IndexedProperty<T>,
+          T[IndexedProperty<T>]
         >
       );
       const key: Deno.KvKey = this.getNonUniqueKey(
@@ -373,9 +378,7 @@ export class Db<
    */
   private getNonUniqueKey<
     T extends Ts,
-    K extends ExtractEntityType<
-      T
-    >["nonUniqueLookupPropertyChains"][number][number],
+    K extends IndexedProperty<T>,
   >(
     entityId?: ExtractEntityId<T>,
     propertyLookupPairs?:

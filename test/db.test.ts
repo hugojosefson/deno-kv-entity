@@ -12,7 +12,7 @@ export const TEST_PREFIX: string[] = [import.meta.url];
 const ENTITY_PERSON: Entity<Person> = {
   id: "person",
   uniqueProperties: ["ssn", "email"] as Array<keyof Person>,
-  nonUniqueLookupPropertyChains: [
+  indexedPropertyChains: [
     ["lastname", "firstname"],
     ["country", "zipcode"],
   ] as Array<keyof Person>[],
@@ -22,7 +22,7 @@ const ENTITY_PERSON: Entity<Person> = {
 const ENTITY_INVOICE: Entity<Invoice> = {
   id: "invoice",
   uniqueProperties: ["invoiceNumber"] as Array<keyof Invoice>,
-  nonUniqueLookupPropertyChains: [
+  indexedPropertyChains: [
     ["customerEmail"],
   ] as Array<keyof Invoice>[],
   _exampleInstance: {} as Invoice,
