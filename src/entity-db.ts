@@ -1,4 +1,4 @@
-import { asArray, isKvKeyPart, prop, VOID } from "./fn.ts";
+import { asArray, isDefined, isKvKeyPart, prop, VOID } from "./fn.ts";
 
 /*
  * General comment about the design of this EntityDb:
@@ -414,16 +414,25 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
       | IndexedProperty<T>,
     entityInstanceUniquePropertyValue?: Deno.KvKeyPart,
   ): Deno.KvKey {
+    const result: Deno.KvKeyPart[] = [];
+
+    if (isDefined(this.config.prefix)) {
+      result.push(...this.config.prefix);
+    }
+
+    if (isDefined(entityDefinitionId)) {
+      result.push(entityDefinitionId);
+    }
+
     return [
-      ...(this.config.prefix ?? []),
-      ...(typeof entityDefinitionId === "undefined"
-        ? []
-        : [entityDefinitionId]),
+      ...result,
+
       ...(typeof propertyLookupPairs === "undefined"
         ? []
         : (isKvKeyPart(propertyLookupPairs)
           ? [propertyLookupPairs]
           : propertyLookupPairs.flat())),
+
       ...(typeof entityInstanceUniquePropertyValue === "undefined"
         ? []
         : [entityInstanceUniquePropertyValue]),

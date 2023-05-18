@@ -39,3 +39,8 @@ export function isKvKeyPart(value: unknown): value is Deno.KvKeyPart {
 export function isKvKey(value: unknown): value is Deno.KvKey {
   return Array.isArray(value) && value.every(isKvKeyPart);
 }
+
+/** Whether a value is not undefined */
+export function isDefined<T>(value: T | undefined): value is T {
+  return typeof value !== "undefined";
+}
