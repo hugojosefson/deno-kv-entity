@@ -171,11 +171,14 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
       entityInstance,
     );
     await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
-      const atomic = connection.atomic();
+      const atomic: Deno.AtomicOperation = connection.atomic();
       for (const key of keys) {
         atomic.set(key, entityInstance);
       }
-      await atomic.commit();
+      const { ok } = await atomic.commit();
+      if (!ok) {
+        throw new Error("commit failed");
+      }
     });
   }
 
@@ -209,7 +212,7 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
   ): Promise<void> {
     const allKeys = this.getAllKeys(entityId);
     await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
-      const atomic = connection.atomic();
+      const atomic: Deno.AtomicOperation = connection.atomic();
       for (const prefix of allKeys) {
         const kvEntries: Deno.KvEntry<unknown>[] = await asArray(
           connection.list({ prefix }),
@@ -218,7 +221,11 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
           atomic.delete(key);
         }
       }
-      await atomic.commit();
+
+      const { ok } = await atomic.commit();
+      if (!ok) {
+        throw new Error("commit failed");
+      }
     });
   }
 
