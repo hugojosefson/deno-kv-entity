@@ -255,12 +255,9 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
    * @param entityDefinitionId The id of the entity to find, if any. If undefined, all entities will be searched.
    * @param propertyLookupKey The non-unique property chain to find values for, if any. If undefined, all values for the given entity will be searched. Or, the name of a non-unique property, if only one property is to be searched.
    */
-  async findAll<
-    T extends Ts,
-    K extends IndexedProperty<T>,
-  >(
+  async findAll<T extends Ts>(
     entityDefinitionId?: ExtractEntityDefinitionId<T>,
-    propertyLookupKey?: PropertyLookupPair<T>[] | K,
+    propertyLookupKey?: PropertyLookupPair<T>[] | IndexedProperty<T>,
   ): Promise<T[]> {
     const key: Deno.KvKey = this.getNonUniqueKey(
       entityDefinitionId,
@@ -409,15 +406,12 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
    * @param entityInstanceUniquePropertyValue The EntityInstance[uniqueProperties[0]] value to calculate the key for. If not provided, all EntityInstances are targeted.
    * @private
    */
-  private getNonUniqueKey<
-    T extends Ts,
-    K extends IndexedProperty<T>,
-  >(
+  private getNonUniqueKey<T extends Ts>(
     entityDefinitionId?: ExtractEntityDefinitionId<T>,
     propertyLookupPairs?:
       | PropertyLookupPair<T>[]
-      | [...PropertyLookupPair<T>[], K]
-      | K,
+      | [...PropertyLookupPair<T>[], IndexedProperty<T>]
+      | IndexedProperty<T>,
     entityInstanceUniquePropertyValue?: Deno.KvKeyPart,
   ): Deno.KvKey {
     return [
