@@ -1,4 +1,4 @@
-import { awaitAsyncIterableIterator, isKvKeyPart, prop, VOID } from "./fn.ts";
+import { asArray, isKvKeyPart, prop, VOID } from "./fn.ts";
 
 /*
  * General comment about the design of this EntityDb:
@@ -47,7 +47,7 @@ type EntityDefinitionId = Deno.KvKeyPart & string;
  *
  * If used as part of a Deno.KvKey, will possibly be followed by a value of that property.
  */
-type IndexedProperty<T extends EntityInstance<T>> = ExtractEntityType<
+type IndexedProperty<T extends EntityInstance<T>> = ExtractEntityDefinition<
   T
 >["indexedPropertyChains"][number][number];
 
@@ -75,7 +75,7 @@ export interface EntityDefinition<T extends EntityInstance<T>> {
   id: EntityDefinitionId;
 
   /** Unused instance of T, to help TypeScript infer types. */
-  _exampleInstance: T;
+  _exampleEntityInstance: T;
 
   /** For example ["ssn", "emailAddress"]. These must be properties of T. */
   uniqueProperties: Array<keyof T>;
@@ -84,26 +84,39 @@ export interface EntityDefinition<T extends EntityInstance<T>> {
   indexedPropertyChains: Array<Array<keyof T>>;
 }
 
-type ExtractEntityType<T> = T extends EntityInstance<infer T>
+/**
+ * Helper type to extract the EntityDefinition from an EntityInstance.
+ *
+ * For example: ExtractEntityDefinition<Person> === EntityDefinition<Person>
+ */
+type ExtractEntityDefinition<T> = T extends EntityInstance<infer T>
   ? EntityDefinition<T>
-  : never;
-type ExtractEntityDefinitionId<T> = T extends EntityInstance<infer T>
-  ? ExtractEntityType<T>["id"]
   : never;
 
 /**
- * Defines a db, and how to store entities in it.
- * @param Ts The types of the entities that can be stored in the db.
+ * Helper type to extract the EntityDefinitionId from an EntityInstance.
+ *
+ * For example: ExtractEntityDefinitionId<Person> === "person"
+ */
+type ExtractEntityDefinitionId<T> = T extends EntityInstance<infer T>
+  ? ExtractEntityDefinition<T>["id"]
+  : never;
+
+/**
+ * Defines an EntityDb, and the structure of the entities that can be stored in it.
+ * @param Ts The types of EntityInstance that can be stored in the db.
  */
 export interface DbConfig<
   Ts extends EntityInstance<Ts>,
 > {
   /** The path to the file where the db is stored. If undefined, the default db is used. */
   dbFilePath?: string;
-  /** The prefix to use for all keys in the db. */
+
+  /** Any prefix to use for all keys in the db. */
   prefix?: Deno.KvKey;
+
   /**
-   * The entities that can be stored in the db.
+   * The EntityDefinitions that define the structure of the entities that can be stored in the db.
    * Example: {
    *   person: {
    *     id: "person",
@@ -117,27 +130,27 @@ export interface DbConfig<
    *     id: "invoice",
    *     uniqueProperties: ["invoiceNumber"],
    *     indexedPropertyChains: [
-   *       ["customer", "lastname", "firstname"],
-   *       ["customer", "country", "zipcode"]
+   *       ["customerEmail"],
    *     ]
    *   }
    * }
    */
   entityDefinitions: {
     [I in ExtractEntityDefinitionId<Ts>]:
-      & ExtractEntityType<Ts>
+      & ExtractEntityDefinition<Ts>
       & { id: I };
   };
 }
 
+/**
+ * A (possibly async) function that takes a Deno.Kv connection, and returns something of interest.
+ */
 type DbConnectionCallback<T> = (db: Deno.Kv) => Promise<T> | T;
 
 /**
- * Defines a db, and how to store entities in it.
+ * Defines an EntityDb, and how to store EntityInstances in it.
  */
-export class EntityDb<
-  Ts extends EntityInstance<Ts>,
-> {
+export class EntityDb<Ts extends EntityInstance<Ts>> {
   /**
    * Configure a db.
    * @param config
@@ -151,9 +164,7 @@ export class EntityDb<
    * @param entityDefinitionId The id of the EntityDefinition to save the value to.
    * @param entityInstance The EntityInstance to save.
    */
-  async save<
-    T extends Ts,
-  >(
+  async save<T extends Ts>(
     entityDefinitionId: ExtractEntityDefinitionId<T>,
     entityInstance: T,
   ): Promise<void> {
@@ -170,17 +181,27 @@ export class EntityDb<
     });
   }
 
+  /**
+   * Deletes all EntityInstance's for a given EntityDefinition.id.
+   *
+   * For example: deleteAll("person") will delete all Person's.
+   *
+   * @param entityDefinitionId The id of the EntityDefinition to delete all instances of.
+   */
   async clearEntity<T extends Ts>(
-    entityId: ExtractEntityDefinitionId<T>,
+    entityDefinitionId: ExtractEntityDefinitionId<T>,
   ): Promise<void> {
-    if (typeof entityId !== "string") {
+    if (typeof entityDefinitionId !== "string") {
       throw new Error(
         "EntityDefinition id must be a string. If you want to clear all entities, use clearAllEntities() instead.",
       );
     }
-    await this._clearEntity(entityId);
+    await this._clearEntity(entityDefinitionId);
   }
 
+  /**
+   * Deletes all EntityInstance's known by this EntityDb
+   */
   async clearAllEntities(): Promise<void> {
     await this._clearEntity();
   }
@@ -188,13 +209,13 @@ export class EntityDb<
   private async _clearEntity<T extends Ts | never>(
     entityId?: ExtractEntityDefinitionId<T>,
   ): Promise<void> {
+    const allKeys = this.getAllKeys(entityId);
     await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
-      for (const prefix of this.getAllKeys(entityId)) {
-        const kvEntries: Deno.KvEntry<unknown>[] =
-          await awaitAsyncIterableIterator(
-            connection.list({ prefix }),
-          );
+      for (const prefix of allKeys) {
+        const kvEntries: Deno.KvEntry<unknown>[] = await asArray(
+          connection.list({ prefix }),
+        );
         for (const { key } of kvEntries) {
           atomic.delete(key);
         }
@@ -204,7 +225,7 @@ export class EntityDb<
   }
 
   /**
-   * Find an entity value in the db.
+   * Find an EntityInstance in the db.
    * @param entityId The id of the entity to find.
    * @param uniquePropertyName The unique property to find the value for.
    * @param uniquePropertyValue The unique property value to find the value for.
@@ -232,7 +253,7 @@ export class EntityDb<
   }
 
   /**
-   * Find all entity values in the db, that match the given non-unique property chain.
+   * Find all EntityInstances in the db, that match the given non-unique property chain.
    * @param entityDefinitionId The id of the entity to find, if any. If undefined, all entities will be searched.
    * @param propertyLookupKey The non-unique property chain to find values for, if any. If undefined, all values for the given entity will be searched. Or, the name of a non-unique property, if only one property is to be searched.
    */
@@ -253,7 +274,7 @@ export class EntityDb<
         const iterator: Deno.KvListIterator<T> = connection.list<T>({
           prefix: key,
         });
-        const entries: Deno.KvEntry<T>[] = await awaitAsyncIterableIterator(
+        const entries: Deno.KvEntry<T>[] = await asArray(
           iterator,
         );
         return entries.map(prop("value")) as T[];
@@ -276,52 +297,56 @@ export class EntityDb<
   }
 
   /**
-   * Calculate all the keys that an entity value is stored at.
-   * @param entityDefinitionId The id of the entity to calculate the keys for, if any. If not provided, the keys will be calculated for all entities.
-   * @param value The value to calculate the keys for, if any. If not provided, the keys will be calculated for all entities.
+   * Calculate all the keys that an EntityInstance is stored at.
+   * @param entityDefinitionId The id of the EntityDefinition to calculate the keys for, if any. If not provided, the keys will be calculated for all entities.
+   * @param entityInstance The EntityInstance to calculate the keys for, if any. If not provided, the keys will be calculated for all under entityDefinitionId.
    * @private
    */
   private getAllKeys<
     T extends Ts,
   >(
     entityDefinitionId?: ExtractEntityDefinitionId<T>,
-    value?: T,
+    entityInstance?: T,
   ): Deno.KvKey[] {
     if (typeof entityDefinitionId === "undefined") {
       return [this.getNonUniqueKey()];
     }
-    if (typeof value === "undefined") {
+    if (typeof entityInstance === "undefined") {
       return [this.getNonUniqueKey(entityDefinitionId)];
     }
     return [
-      ...this.getUniqueKeys(entityDefinitionId, value),
-      ...this.getNonUniqueKeys(entityDefinitionId, value),
+      ...this.getUniqueKeys(entityDefinitionId, entityInstance),
+      ...this.getNonUniqueKeys(entityDefinitionId, entityInstance),
     ];
   }
 
   /**
-   * Calculate all the unique keys that an entity value is stored at.
-   * @param entityDefinitionId The id of the entity to calculate the keys for.
-   * @param value The value to calculate the keys for.
+   * Calculate all the unique keys that an EntityInstance is stored at.
+   * @param entityDefinitionId The id of the EntityDefinition to calculate the keys for.
+   * @param entityInstance The EntityInstance to calculate the keys for.
    * @private
    */
   private getUniqueKeys<
     T extends Ts,
   >(
     entityDefinitionId: ExtractEntityDefinitionId<T>,
-    value: T,
+    entityInstance: T,
   ): Deno.KvKey[] {
     const entity: EntityDefinition<T> = this.config
       .entityDefinitions[entityDefinitionId] as unknown as EntityDefinition<T>;
     return entity.uniqueProperties.map((
-      uniquePropertyName: keyof T,
+      uniqueProperty: keyof T,
     ) =>
-      this.getUniqueKey(entityDefinitionId, uniquePropertyName, value[uniquePropertyName])
+      this.getUniqueKey(
+        entityDefinitionId,
+        uniqueProperty,
+        entityInstance[uniqueProperty],
+      )
     );
   }
 
   /**
-   * Calculate the unique key that an entity value is stored at.
+   * Calculate the unique key that an EntityInstance is stored at.
    * @param entityDefinitionId The id of the entity to calculate the key for.
    * @param uniquePropertyName The unique property to calculate the key for.
    * @param uniquePropertyValue The unique property value to calculate the key for.
@@ -343,26 +368,30 @@ export class EntityDb<
   }
 
   /**
-   * Calculate all the non-unique keys that an entity's values are stored at.
-   * @param entityDefinitionId The id of the entity to calculate the keys for.
-   * @param value The value to calculate the keys for.
+   * Calculate all the non-unique keys that an EntityInstance is stored at.
+   * @param entityDefinitionId The id of the EntityDefinition to calculate the keys for.
+   * @param entityInstance The EntityInstance to calculate the keys for.
    * @private
    */
   private getNonUniqueKeys<
     T extends Ts,
   >(
     entityDefinitionId: ExtractEntityDefinitionId<T>,
-    value: T,
+    entityInstance: T,
   ): Deno.KvKey[] {
-    const entity: EntityDefinition<T> = this.config
+    const entityDefinition: EntityDefinition<T> = this.config
       .entityDefinitions[entityDefinitionId] as unknown as EntityDefinition<T>;
-    const chains: Array<Array<keyof T>> = entity.indexedPropertyChains;
+    const indexedPropertyChains: Array<Array<keyof T>> =
+      entityDefinition.indexedPropertyChains;
     const result: Deno.KvKey[] = [];
-    for (const properties of chains) {
-      const propertyLookupPairs = properties.map((property: keyof T) =>
+
+    for (const indexedPropertyChain of indexedPropertyChains) {
+      const propertyLookupPairs = indexedPropertyChain.map((
+        indexedProperty: keyof T,
+      ) =>
         [
-          property,
-          value[property],
+          indexedProperty,
+          entityInstance[indexedProperty],
         ] as PropertyLookupPair<
           IndexedProperty<T>,
           T[IndexedProperty<T>]
@@ -371,7 +400,7 @@ export class EntityDb<
       const key: Deno.KvKey = this.getNonUniqueKey(
         entityDefinitionId,
         propertyLookupPairs,
-        value[entity.uniqueProperties[0]] as Deno.KvKeyPart,
+        entityInstance[entityDefinition.uniqueProperties[0]] as Deno.KvKeyPart,
       );
       result.push(key);
     }
@@ -379,10 +408,10 @@ export class EntityDb<
   }
 
   /**
-   * Calculate the non-unique key that an entity value is stored at.
+   * Calculate the non-unique key that an EntityInstance is stored at.
    * @param entityDefinitionId The id of the entity to calculate the key for, if any. If not provided, all entities are targeted.
-   * @param propertyLookupPairs The non-unique property chain to calculate the key for, if any. If not provided, all non-unique property chains are targeted.  Or, the name of a non-unique property, if only one property is to be searched.
-   * @param valueUniqueId The unique id of the value to calculate the key for. If not provided, all values are targeted.
+   * @param propertyLookupPairs The indexed property chain to calculate the key for, if any. If not provided, all indexed property chains are targeted.  Or, the name of an indexed property, if only one property is to be searched.
+   * @param entityInstanceUniquePropertyValue The EntityInstance[uniqueProperties[0]] value to calculate the key for. If not provided, all EntityInstances are targeted.
    * @private
    */
   private getNonUniqueKey<
@@ -394,17 +423,21 @@ export class EntityDb<
       | PropertyLookupPair<K, T>[]
       | [...PropertyLookupPair<K, T>[], K]
       | K,
-    valueUniqueId?: Deno.KvKeyPart,
+    entityInstanceUniquePropertyValue?: Deno.KvKeyPart,
   ): Deno.KvKey {
     return [
       ...(this.config.prefix ?? []),
-      ...(typeof entityDefinitionId === "undefined" ? [] : [entityDefinitionId]),
+      ...(typeof entityDefinitionId === "undefined"
+        ? []
+        : [entityDefinitionId]),
       ...(typeof propertyLookupPairs === "undefined"
         ? []
         : (isKvKeyPart(propertyLookupPairs)
           ? [propertyLookupPairs]
           : propertyLookupPairs.flat())),
-      ...(typeof valueUniqueId === "undefined" ? [] : [valueUniqueId]),
+      ...(typeof entityInstanceUniquePropertyValue === "undefined"
+        ? []
+        : [entityInstanceUniquePropertyValue]),
     ] as Deno.KvKey;
   }
 }

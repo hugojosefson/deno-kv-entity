@@ -20,7 +20,7 @@ const ENTITY_DEFINITION_PERSON: EntityDefinition<Person> = {
     ["lastname", "firstname"],
     ["country", "zipcode"],
   ] as Array<keyof Person>[],
-  _exampleInstance: {} as Person,
+  _exampleEntityInstance: {} as Person,
 } as EntityDefinition<Person>;
 
 const ENTITY_DEFINITION_INVOICE: EntityDefinition<Invoice> = {
@@ -29,7 +29,7 @@ const ENTITY_DEFINITION_INVOICE: EntityDefinition<Invoice> = {
   indexedPropertyChains: [
     ["customerEmail"],
   ] as Array<keyof Invoice>[],
-  _exampleInstance: {} as Invoice,
+  _exampleEntityInstance: {} as Invoice,
 } as EntityDefinition<Invoice>;
 
 interface Person extends EntityInstance<Record<string, string>> {
