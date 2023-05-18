@@ -57,15 +57,13 @@ type IndexedProperty<T extends EntityInstance<T>> = ExtractEntityDefinition<
  *  The second element is the value of that property.
  *
  * T must be an EntityInstance.
- * K is the indexed property of T.
- * T[K] is the type of the value at the property K.
+ * T[IndexedProperty<T>] is the type of the value at the property IndexedProperty<T>.
  */
 type PropertyLookupPair<
-  K extends IndexedProperty<T>,
   T extends EntityInstance<T>,
 > =
   & Deno.KvKey
-  & [K, T[K]];
+  & [IndexedProperty<T>, T[IndexedProperty<T>]];
 
 /**
  * A definition of an Entity that can be stored in the db.
@@ -262,7 +260,7 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
     K extends IndexedProperty<T>,
   >(
     entityDefinitionId?: ExtractEntityDefinitionId<T>,
-    propertyLookupKey?: PropertyLookupPair<K, T>[] | K,
+    propertyLookupKey?: PropertyLookupPair<T>[] | K,
   ): Promise<T[]> {
     const key: Deno.KvKey = this.getNonUniqueKey(
       entityDefinitionId,
@@ -392,10 +390,7 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
         [
           indexedProperty,
           entityInstance[indexedProperty],
-        ] as PropertyLookupPair<
-          IndexedProperty<T>,
-          T[IndexedProperty<T>]
-        >
+        ] as PropertyLookupPair<T>
       );
       const key: Deno.KvKey = this.getNonUniqueKey(
         entityDefinitionId,
@@ -420,8 +415,8 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
   >(
     entityDefinitionId?: ExtractEntityDefinitionId<T>,
     propertyLookupPairs?:
-      | PropertyLookupPair<K, T>[]
-      | [...PropertyLookupPair<K, T>[], K]
+      | PropertyLookupPair<T>[]
+      | [...PropertyLookupPair<T>[], K]
       | K,
     entityInstanceUniquePropertyValue?: Deno.KvKeyPart,
   ): Deno.KvKey {
