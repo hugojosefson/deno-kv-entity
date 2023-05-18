@@ -402,18 +402,18 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
   /**
    * Calculate the non-unique key that an EntityInstance is stored at.
    * @param entityDefinitionId The id of the entity to calculate the key for, if any. If not provided, all entities are targeted.
-   * @param propertyLookupPairs The indexed property chain to calculate the key for, if any. If not provided, all indexed property chains are targeted.  Or, the name of an indexed property, if only one property is to be searched.
+   * @param propertyLookup The indexed property chain to calculate the key for, if any. If not provided, all indexed property chains are targeted.  Or, the name of an indexed property, if only one property is to be searched.
    * @param entityInstanceUniquePropertyValue The EntityInstance[uniqueProperties[0]] value to calculate the key for. If not provided, all EntityInstances are targeted.
    * @private
    */
   private getNonUniqueKey<T extends Ts>(
     entityDefinitionId?: ExtractEntityDefinitionId<T>,
-    propertyLookupPairs?:
+    propertyLookup?:
       | PropertyLookupPair<T>[]
       | [...PropertyLookupPair<T>[], IndexedProperty<T>]
       | IndexedProperty<T>,
     entityInstanceUniquePropertyValue?: Deno.KvKeyPart,
-  ): Deno.KvKey {
+  ): Deno.KvKeyPart[] {
     const result: Deno.KvKeyPart[] = [];
 
     if (isDefined(this.config.prefix)) {
@@ -422,20 +422,32 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
 
     if (isDefined(entityDefinitionId)) {
       result.push(entityDefinitionId);
+    } else {
+      if ([propertyLookup, entityInstanceUniquePropertyValue].some(isDefined)) {
+        throw new Error(
+          "entityDefinitionId must be provided if propertyLookup or entityInstanceUniquePropertyValue are provided",
+        );
+      }
     }
 
-    return [
-      ...result,
+    if (isDefined(propertyLookup)) {
+      if (isKvKeyPart(propertyLookup)) { // if it's a single property, an IndexedProperty<T>
+        result.push(propertyLookup);
+      } else { // it's an array of PropertyLookupPair<T> or an array of PropertyLookupPair<T> and an IndexedProperty<T>
+        result.push(...propertyLookup.flat() as Deno.KvKeyPart[]);
+      }
+    } else {
+      if (isDefined(entityInstanceUniquePropertyValue)) {
+        throw new Error(
+          "propertyLookup must be provided if entityInstanceUniquePropertyValue is provided",
+        );
+      }
+    }
 
-      ...(typeof propertyLookupPairs === "undefined"
-        ? []
-        : (isKvKeyPart(propertyLookupPairs)
-          ? [propertyLookupPairs]
-          : propertyLookupPairs.flat())),
+    if (isDefined(entityInstanceUniquePropertyValue)) {
+      result.push(entityInstanceUniquePropertyValue);
+    }
 
-      ...(typeof entityInstanceUniquePropertyValue === "undefined"
-        ? []
-        : [entityInstanceUniquePropertyValue]),
-    ] as Deno.KvKey;
+    return result;
   }
 }
