@@ -3,70 +3,74 @@ import { awaitAsyncIterableIterator, isKvKeyPart, prop, VOID } from "./fn.ts";
 /*
  * General comment about the design of this EntityDb:
  *
- * uniqueProperty is related to a Deno.KvKey that can be used to look up a single Entity instance.
- * indexedPropertyChain is related to a Deno.KvKey that can be used to lookup multiple Entity instances.
+ * uniqueProperty is related to a Deno.KvKey that can be used to look up a single EntityInstance.
+ * indexedPropertyChain is related to a Deno.KvKey that can be used to lookup multiple EntityInstance.
  *
- * An Entity instance is stored directly on each of the unique Deno.KvKey's derived from its uniqueProperties.
- * For each indexedPropertyChain, the Deno.KvKey to store the Entity instance at, is calculated as:
+ * An EntityInstance is stored directly on each of the unique Deno.KvKey's derived from its EntityDefinition's uniqueProperties.
+ * For each indexedPropertyChain, the Deno.KvKey to store the EntityInstance at, is calculated as:
  * [
  *   ...indexedPropertyChain.flatMap(prop => [prop, entityInstance[prop]]),
- *   Entity.uniqueProperties[0]
+ *   EntityDefinition.uniqueProperties[0]
  * ].
  *
- * For example, if we have an entity with id "person", and
+ * For example, if we have an EntityDefinition with id "person", and
  * uniqueProperties ["ssn", "emailAddress"], and
  * indexedPropertyChains [["lastname", "firstname"], ["country", "zipcode"]], then
- * we store the value at the following keys:
+ * we store the EntityInstance at the following keys:
  * - ["person", "ssn", "123456789"]
  * - ["person", "emailAddress", "alice@example.com"]
  * - ["person", "lastname", "Doe", "firstname", "Alice", "123456789"]
  * - ["person", "country", "US", "zipcode", "12345", "123456789"]
  *
- * The first two are unique keys, and the last two are non-unique keys.
+ * The first two represent unique keys for an EntityInstance, and the last two represent indexed keys for that EntityInstance.
  */
 
 /**
- * Type of some data object, that can be stored in the db.
+ * An EntityInstance, the concrete object that can be stored in the db.
+ *
+ * For example: {"firstname": "Alice", "lastname": "Doe", "ssn": "123456789", "emailAddress": "alice@example.com"}
  *
  * All the keys and values we care about are related to the db keys, so must be of type Deno.KvKeyPart.
  */
-export type DataObject<
-  T extends DataObject<T>,
-> = {
+export type EntityInstance<T extends EntityInstance<T>> = {
   [K in keyof T]: K extends Deno.KvKeyPart ? (
       T[K] extends Deno.KvKeyPart ? T[K] : never
     )
     : never;
 };
 
+/** For example "person", "invoice", or "product" */
 type EntityId = Deno.KvKeyPart & string;
 
 /**
- * A property on T, that is used to look up multiple instances of T. Will possibly be followed by a value of that property, to form part of a Deno.KvKey.
+ * A property on T, that is used to look up multiple instances of T.
+ *
+ * If used as part of a Deno.KvKey, will possibly be followed by a value of that property.
  */
-type IndexedProperty<T extends DataObject<T>> = ExtractEntityType<
+type IndexedProperty<T extends EntityInstance<T>> = ExtractEntityType<
   T
 >["indexedPropertyChains"][number][number];
+
 /**
  * A tuple:
- *  The first element is a property name from T.
+ *  The first element is an indexed property from T.
  *  The second element is the value of that property.
  *
- * T must be a DataObject.
- * K is the property of T.
+ * T must be an EntityInstance.
+ * K is the indexed property of T.
  * T[K] is the type of the value at the property K.
  */
 type PropertyLookupPair<
   K extends IndexedProperty<T>,
-  T extends DataObject<T>,
+  T extends EntityInstance<T>,
 > =
   & Deno.KvKey
   & [K, T[K]];
 
 /**
- * A description of something that can be stored in the db.
+ * A definition of an Entity that can be stored in the db.
  */
-export interface Entity<T extends DataObject<T>> {
+export interface EntityDefinition<T extends EntityInstance<T>> {
   /** For example "person", "invoice", or "product" */
   id: EntityId;
 
@@ -76,12 +80,14 @@ export interface Entity<T extends DataObject<T>> {
   /** For example ["ssn", "emailAddress"]. These must be properties of T. */
   uniqueProperties: Array<keyof T>;
 
-  /** For example [["lastname", "firstname"], ["country", "zipcode"]]. These must be chains of properties on T. They will be used to construct Deno.KvKey's, for example ["lastname", "Smith", "firstname", "Alice"] */
+  /** For example [["lastname", "firstname"], ["country", "zipcode"]]. These must be chains of properties on T. They will be used to construct Deno.KvKey's, for example ["lastname", "Doe", "firstname", "Alice"] */
   indexedPropertyChains: Array<Array<keyof T>>;
 }
 
-type ExtractEntityType<T> = T extends DataObject<infer T> ? Entity<T> : never;
-type ExtractEntityId<T> = T extends DataObject<infer T>
+type ExtractEntityType<T> = T extends EntityInstance<infer T>
+  ? EntityDefinition<T>
+  : never;
+type ExtractEntityDefinitionId<T> = T extends EntityInstance<infer T>
   ? ExtractEntityType<T>["id"]
   : never;
 
@@ -90,7 +96,7 @@ type ExtractEntityId<T> = T extends DataObject<infer T>
  * @param Ts The types of the entities that can be stored in the db.
  */
 export interface DbConfig<
-  Ts extends DataObject<Ts>,
+  Ts extends EntityInstance<Ts>,
 > {
   /** The path to the file where the db is stored. If undefined, the default db is used. */
   dbFilePath?: string;
@@ -117,8 +123,8 @@ export interface DbConfig<
    *   }
    * }
    */
-  entities: {
-    [I in ExtractEntityId<Ts>]:
+  entityDefinitions: {
+    [I in ExtractEntityDefinitionId<Ts>]:
       & ExtractEntityType<Ts>
       & { id: I };
   };
@@ -129,8 +135,8 @@ type DbConnectionCallback<T> = (db: Deno.Kv) => Promise<T> | T;
 /**
  * Defines a db, and how to store entities in it.
  */
-export class Db<
-  Ts extends DataObject<Ts>,
+export class EntityDb<
+  Ts extends EntityInstance<Ts>,
 > {
   /**
    * Configure a db.
@@ -141,32 +147,35 @@ export class Db<
   ) {}
 
   /**
-   * Save an entity value to the db.
-   * @param entityId The id of the entity to save.
-   * @param value The value to save.
+   * Save an EntityInstance to the db.
+   * @param entityDefinitionId The id of the EntityDefinition to save the value to.
+   * @param entityInstance The EntityInstance to save.
    */
   async save<
     T extends Ts,
   >(
-    entityId: ExtractEntityId<T>,
-    value: T,
+    entityDefinitionId: ExtractEntityDefinitionId<T>,
+    entityInstance: T,
   ): Promise<void> {
-    const keys: Deno.KvKey[] = this.getAllKeys(entityId, value);
+    const keys: Deno.KvKey[] = this.getAllKeys(
+      entityDefinitionId,
+      entityInstance,
+    );
     await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
       for (const key of keys) {
-        atomic.set(key, value);
+        atomic.set(key, entityInstance);
       }
       await atomic.commit();
     });
   }
 
   async clearEntity<T extends Ts>(
-    entityId: ExtractEntityId<T>,
+    entityId: ExtractEntityDefinitionId<T>,
   ): Promise<void> {
     if (typeof entityId !== "string") {
       throw new Error(
-        "Entity id must be a string. If you want to clear all entities, use clearAllEntities() instead.",
+        "EntityDefinition id must be a string. If you want to clear all entities, use clearAllEntities() instead.",
       );
     }
     await this._clearEntity(entityId);
@@ -177,7 +186,7 @@ export class Db<
   }
 
   private async _clearEntity<T extends Ts | never>(
-    entityId?: ExtractEntityId<T>,
+    entityId?: ExtractEntityDefinitionId<T>,
   ): Promise<void> {
     await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
       const atomic = connection.atomic();
@@ -204,7 +213,7 @@ export class Db<
   async find<
     T extends Ts,
   >(
-    entityId: ExtractEntityId<T>,
+    entityId: ExtractEntityDefinitionId<T>,
     uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
   ): Promise<T | undefined> {
@@ -231,7 +240,7 @@ export class Db<
     T extends Ts,
     K extends IndexedProperty<T>,
   >(
-    entityId?: ExtractEntityId<T>,
+    entityId?: ExtractEntityDefinitionId<T>,
     propertyLookupKey?: PropertyLookupPair<K, T>[] | K,
   ): Promise<T[]> {
     const key: Deno.KvKey = this.getNonUniqueKey(
@@ -275,7 +284,7 @@ export class Db<
   private getAllKeys<
     T extends Ts,
   >(
-    entityId?: ExtractEntityId<T>,
+    entityId?: ExtractEntityDefinitionId<T>,
     value?: T,
   ): Deno.KvKey[] {
     if (typeof entityId === "undefined") {
@@ -299,11 +308,11 @@ export class Db<
   private getUniqueKeys<
     T extends Ts,
   >(
-    entityId: ExtractEntityId<T>,
+    entityId: ExtractEntityDefinitionId<T>,
     value: T,
   ): Deno.KvKey[] {
-    const entity: Entity<T> = this.config
-      .entities[entityId] as unknown as Entity<T>;
+    const entity: EntityDefinition<T> = this.config
+      .entityDefinitions[entityId] as unknown as EntityDefinition<T>;
     return entity.uniqueProperties.map((
       uniquePropertyName: keyof T,
     ) =>
@@ -321,7 +330,7 @@ export class Db<
   private getUniqueKey<
     T extends Ts,
   >(
-    entityId: ExtractEntityId<T>,
+    entityId: ExtractEntityDefinitionId<T>,
     uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
   ): Deno.KvKey {
@@ -342,11 +351,11 @@ export class Db<
   private getNonUniqueKeys<
     T extends Ts,
   >(
-    entityId: ExtractEntityId<T>,
+    entityId: ExtractEntityDefinitionId<T>,
     value: T,
   ): Deno.KvKey[] {
-    const entity: Entity<T> = this.config
-      .entities[entityId] as unknown as Entity<T>;
+    const entity: EntityDefinition<T> = this.config
+      .entityDefinitions[entityId] as unknown as EntityDefinition<T>;
     const chains: Array<Array<keyof T>> = entity.indexedPropertyChains;
     const result: Deno.KvKey[] = [];
     for (const properties of chains) {
@@ -380,7 +389,7 @@ export class Db<
     T extends Ts,
     K extends IndexedProperty<T>,
   >(
-    entityId?: ExtractEntityId<T>,
+    entityId?: ExtractEntityDefinitionId<T>,
     propertyLookupPairs?:
       | PropertyLookupPair<K, T>[]
       | [...PropertyLookupPair<K, T>[], K]
