@@ -231,20 +231,20 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
 
   /**
    * Find an EntityInstance in the db.
-   * @param entityId The id of the entity to find.
-   * @param uniquePropertyName The unique property to find the value for.
-   * @param uniquePropertyValue The unique property value to find the value for.
-   * @returns the value, or undefined if not found at the given key.
+   * @param entityDefinitionId The id of the EntityDefinition to find the EntityInstance for.
+   * @param uniquePropertyName The unique property to find the EntityInstance for.
+   * @param uniquePropertyValue The unique property value to find the EntityInstance for.
+   * @returns the EntityInstance, or undefined if not found at the given key.
    */
   async find<
     T extends Ts,
   >(
-    entityId: ExtractEntityDefinitionId<T>,
+    entityDefinitionId: ExtractEntityDefinitionId<T>,
     uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
   ): Promise<T | undefined> {
     const key: Deno.KvKey = this.getUniqueKey(
-      entityId,
+      entityDefinitionId,
       uniquePropertyName,
       uniquePropertyValue,
     );
@@ -255,6 +255,51 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
         return entry.value ?? undefined;
       },
     );
+  }
+
+  /**
+   * Delete an EntityInstance from the db.
+   * @param entityDefinitionId The id of the EntityDefinition to delete the EntityInstance from.
+   * @param uniquePropertyName The unique property to delete the EntityInstance for.
+   * @param uniquePropertyValue The unique property value to delete the EntityInstance for.
+   */
+  async delete<
+    T extends Ts,
+  >(
+    entityDefinitionId: ExtractEntityDefinitionId<T>,
+    uniquePropertyName: keyof T,
+    uniquePropertyValue: T[keyof T],
+  ): Promise<void> {
+    const entityInstance: T | undefined = await this.find(
+      entityDefinitionId,
+      uniquePropertyName,
+      uniquePropertyValue,
+    );
+
+    if (isDefined(entityInstance)) {
+      await this.deleteEntityInstance(entityDefinitionId, entityInstance);
+    }
+  }
+
+  async deleteEntityInstance<T extends Ts>(
+    entityDefinitionId: ExtractEntityDefinitionId<T>,
+    entityInstance: T,
+  ): Promise<void> {
+    // find all keys the same way as when saving
+    const keys: Deno.KvKey[] = this.getAllKeys(
+      entityDefinitionId,
+      entityInstance,
+    );
+    await this._doWithConnection(VOID, async (connection: Deno.Kv) => {
+      const atomic: Deno.AtomicOperation = connection.atomic();
+      for (const key of keys) {
+        atomic.delete(key);
+      }
+      const { ok } = await atomic.commit();
+      if (!ok) {
+        throw new Error("commit failed");
+      }
+    });
   }
 
   /**
@@ -334,9 +379,9 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
     entityDefinitionId: ExtractEntityDefinitionId<T>,
     entityInstance: T,
   ): Deno.KvKey[] {
-    const entity: EntityDefinition<T> = this.config
+    const entityDefinition: EntityDefinition<T> = this.config
       .entityDefinitions[entityDefinitionId] as unknown as EntityDefinition<T>;
-    return entity.uniqueProperties.map((
+    return entityDefinition.uniqueProperties.map((
       uniqueProperty: keyof T,
     ) =>
       this.getUniqueKey(
@@ -383,8 +428,10 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
   ): Deno.KvKey[] {
     const entityDefinition: EntityDefinition<T> = this.config
       .entityDefinitions[entityDefinitionId] as unknown as EntityDefinition<T>;
+    const uniqueProperty: keyof T = entityDefinition.uniqueProperties[0];
     const indexedPropertyChains: Array<Array<keyof T>> =
       entityDefinition.indexedPropertyChains;
+
     const result: Deno.KvKey[] = [];
 
     for (const indexedPropertyChain of indexedPropertyChains) {
@@ -396,12 +443,12 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
           entityInstance[indexedProperty],
         ] as PropertyLookupPair<T>
       );
-      const key: Deno.KvKey = this.getNonUniqueKey(
+      const nonUniqueKey: Deno.KvKey = this.getNonUniqueKey(
         entityDefinitionId,
         propertyLookupPairs,
-        entityInstance[entityDefinition.uniqueProperties[0]] as Deno.KvKeyPart,
+        entityInstance[uniqueProperty] as Deno.KvKeyPart,
       );
-      result.push(key);
+      result.push(nonUniqueKey);
     }
     return result;
   }
