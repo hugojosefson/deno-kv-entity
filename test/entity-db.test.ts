@@ -260,6 +260,26 @@ describe("db", () => {
         ALICE.ssn,
       );
       eq(actual2, undefined);
+
+      // check that the person was deleted from other indexes
+      const actual3: Person | undefined = await db.find(
+        "person",
+        "email",
+        ALICE.email,
+      );
+      eq(actual3, undefined);
+
+      const actual4: Person[] = await db.findAll(
+        "person",
+        [
+          ["country", "US"],
+          ["zipcode", "12345"],
+        ],
+      );
+      eq(actual4, []);
+
+      const actual5: Person[] = await db.findAll("person");
+      eq(actual5, []);
     });
     it("should delete an Invoice via invoiceNumber", async () => {
       const invoice: Invoice = {
