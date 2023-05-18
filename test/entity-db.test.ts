@@ -202,17 +202,7 @@ describe("db", () => {
       eq(actual, []);
     });
     it("should return empty array for findAll()", async () => {
-      const actual: unknown[] = await db.findAll<
-        Person | Invoice,
-        | "ssn"
-        | "email"
-        | "firstname"
-        | "lastname"
-        | "country"
-        | "zipcode"
-        | "invoiceNumber"
-        | "customerEmail"
-      >();
+      const actual: unknown[] = await db.findAll<Person | Invoice>();
       eq(actual, []);
     });
   });
