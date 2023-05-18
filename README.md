@@ -3,7 +3,7 @@
 Typed library for specifying and storing entities in a
 [Deno.Kv](https://deno.com/kv) database.
 
-Requires Deno v1.32 or later, with the `--unstable` flag.
+Requires [Deno](https://deno.land/) v1.32 or later, with the `--unstable` flag.
 
 Current build status:
 
