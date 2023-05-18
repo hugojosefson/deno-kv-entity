@@ -236,4 +236,50 @@ describe("db", () => {
       eq(actualInvoices2, [invoice1, invoice2]);
     });
   });
+  describe("delete", () => {
+    it("should delete a Person via ssn", async () => {
+      const person: Person = {
+        ssn: ALICE.ssn,
+        email: ALICE.email,
+        firstname: "Alice",
+        lastname: "Smith",
+        country: "US",
+        zipcode: "12345",
+      };
+      await db.save("person", person);
+      const actual: Person | undefined = await db.find(
+        "person",
+        "ssn",
+        ALICE.ssn,
+      );
+      eq(actual, person);
+      await db.delete("person", "ssn", ALICE.ssn);
+      const actual2: Person | undefined = await db.find(
+        "person",
+        "ssn",
+        ALICE.ssn,
+      );
+      eq(actual2, undefined);
+    });
+    it("should delete an Invoice via invoiceNumber", async () => {
+      const invoice: Invoice = {
+        invoiceNumber: "123",
+        customerEmail: ALICE.email,
+      };
+      await db.save("invoice", invoice);
+      const actual: Invoice | undefined = await db.find(
+        "invoice",
+        "invoiceNumber",
+        "123",
+      );
+      eq(actual, invoice);
+      await db.delete("invoice", "invoiceNumber", "123");
+      const actual2: Invoice | undefined = await db.find(
+        "invoice",
+        "invoiceNumber",
+        "123",
+      );
+      eq(actual2, undefined);
+    });
+  });
 });
