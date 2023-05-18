@@ -3,7 +3,7 @@
  * @param iterator the iterator to await
  * @returns the results as an array
  */
-export async function awaitAsyncIterableIterator<T>(
+export async function asArray<T>(
   iterator: AsyncIterableIterator<T>,
 ): Promise<T[]> {
   const results: T[] = [];
@@ -14,7 +14,7 @@ export async function awaitAsyncIterableIterator<T>(
 }
 
 /**
- * Get a property from an object.
+ * Creates a function that gets a property's value from an object.
  * @param name the name of the property to get
  */
 export function prop<T>(name: keyof T): (obj: T) => T[keyof T] {
@@ -33,4 +33,9 @@ export function isKvKeyPart(value: unknown): value is Deno.KvKeyPart {
     "boolean",
   ].includes(typeof value) ||
     value?.constructor === Uint8Array;
+}
+
+/** Whether a value is a Deno.KvKey */
+export function isKvKey(value: unknown): value is Deno.KvKey {
+  return Array.isArray(value) && value.every(isKvKeyPart);
 }

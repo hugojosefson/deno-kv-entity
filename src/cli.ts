@@ -3,7 +3,7 @@
 
 import { EntityDb } from "./entity-db.ts";
 import { TEST_PREFIX } from "../test/entity-db.test.ts";
-import { awaitAsyncIterableIterator } from "./fn.ts";
+import { asArray } from "./fn.ts";
 
 async function main() {
   const db = new EntityDb({
@@ -17,7 +17,7 @@ async function main() {
         ...TEST_PREFIX,
         ...Deno.args,
       ];
-      return (await awaitAsyncIterableIterator(
+      return (await asArray(
         conn.list({ prefix }),
       )) as Record<string, unknown>[];
     },
