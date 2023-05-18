@@ -5,11 +5,15 @@ import {
   describe,
   it,
 } from "https://deno.land/std@0.187.0/testing/bdd.ts";
-import { Db, Entity } from "../src/db.ts";
+import {
+  EntityDb,
+  EntityDefinition,
+  EntityInstance,
+} from "../src/entity-db.ts";
 
 export const TEST_PREFIX: string[] = [import.meta.url];
 
-const ENTITY_PERSON: Entity<Person> = {
+const ENTITY_DEFINITION_PERSON: EntityDefinition<Person> = {
   id: "person",
   uniqueProperties: ["ssn", "email"] as Array<keyof Person>,
   indexedPropertyChains: [
@@ -17,18 +21,18 @@ const ENTITY_PERSON: Entity<Person> = {
     ["country", "zipcode"],
   ] as Array<keyof Person>[],
   _exampleInstance: {} as Person,
-} as Entity<Person>;
+} as EntityDefinition<Person>;
 
-const ENTITY_INVOICE: Entity<Invoice> = {
+const ENTITY_DEFINITION_INVOICE: EntityDefinition<Invoice> = {
   id: "invoice",
   uniqueProperties: ["invoiceNumber"] as Array<keyof Invoice>,
   indexedPropertyChains: [
     ["customerEmail"],
   ] as Array<keyof Invoice>[],
   _exampleInstance: {} as Invoice,
-} as Entity<Invoice>;
+} as EntityDefinition<Invoice>;
 
-interface Person {
+interface Person extends EntityInstance<Record<string, string>> {
   ssn: string;
   email: string;
   firstname: string;
@@ -37,7 +41,7 @@ interface Person {
   zipcode: string;
 }
 
-interface Invoice {
+interface Invoice extends EntityInstance<Record<string, string>> {
   invoiceNumber: string;
   customerEmail: string;
 }
@@ -60,14 +64,14 @@ const BOB: Person = {
   zipcode: "12345",
 } as const;
 
-let db: Db<Person | Invoice>;
+let db: EntityDb<Person | Invoice>;
 
 beforeAll(() => {
-  db = new Db<Person | Invoice>({
+  db = new EntityDb<Person | Invoice>({
     prefix: TEST_PREFIX,
-    entities: {
-      person: ENTITY_PERSON as Entity<Person>,
-      invoice: ENTITY_INVOICE as Entity<Invoice>,
+    entityDefinitions: {
+      person: ENTITY_DEFINITION_PERSON as EntityDefinition<Person>,
+      invoice: ENTITY_DEFINITION_INVOICE as EntityDefinition<Invoice>,
     },
   });
 });
@@ -78,7 +82,7 @@ beforeEach(async () => {
 
 describe("db", () => {
   describe("save", () => {
-    it("should put a Person", async () => {
+    it("should save a Person", async () => {
       const person: Person = ALICE;
       await db.save("person", person);
       const actual: Person | undefined = await db.find(
@@ -89,7 +93,7 @@ describe("db", () => {
       eq(actual, person);
     });
 
-    it("should put an Invoice", async () => {
+    it("should save an Invoice", async () => {
       const invoice: Invoice = {
         invoiceNumber: "123",
         customerEmail: ALICE.email,
