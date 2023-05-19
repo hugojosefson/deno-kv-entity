@@ -10,6 +10,7 @@ import {
   EntityDefinition,
   EntityInstance,
 } from "../src/entity-db.ts";
+import { Maybe } from "../src/fn.ts";
 
 export const TEST_PREFIX: string[] = [import.meta.url];
 
@@ -85,7 +86,7 @@ describe("db", () => {
     it("should save a Person", async () => {
       const person: Person = ALICE;
       await db.save("person", person);
-      const actual: Person | undefined = await db.find(
+      const actual: Maybe<Person> = await db.find(
         "person",
         "ssn",
         ALICE.ssn,
@@ -99,7 +100,7 @@ describe("db", () => {
         customerEmail: ALICE.email,
       };
       await db.save("invoice", invoice);
-      const actual: Invoice | undefined = await db.find(
+      const actual: Maybe<Invoice> = await db.find(
         "invoice",
         "invoiceNumber",
         "123",
@@ -112,14 +113,14 @@ describe("db", () => {
       await db.save("person", ALICE);
       await db.save("person", BOB);
 
-      const actualPerson1: Person | undefined = await db.find(
+      const actualPerson1: Maybe<Person> = await db.find(
         "person",
         "ssn",
         ALICE.ssn,
       );
       eq(actualPerson1, ALICE);
 
-      const actualPerson2: Person | undefined = await db.find(
+      const actualPerson2: Maybe<Person> = await db.find(
         "person",
         "ssn",
         BOB.ssn,
@@ -161,49 +162,42 @@ describe("db", () => {
   });
   describe("empty db by default", () => {
     it("should return undefined for a Person", async () => {
-      const actual: Person | undefined = await db.find(
-        "person",
-        "ssn",
-        ALICE.ssn,
-      );
-      eq(actual, undefined);
+      await assertFind<Person>(db, undefined, ["person", "ssn", ALICE.ssn]);
     });
     it("should return undefined for an Invoice", async () => {
-      const actual: Invoice | undefined = await db.find(
+      await assertFind<Invoice>(db, undefined, [
         "invoice",
         "invoiceNumber",
         "123",
-      );
-      eq(actual, undefined);
+      ]);
     });
     it('should return empty array for findAll("person, country, zipcode)', async () => {
-      const actual: Person[] = await db.findAll(
-        "person",
-        [
+      await assertFindAll<Person>(
+        db,
+        [],
+        ["person", [
           ["country", "US"],
           ["zipcode", "12345"],
-        ],
+        ]],
       );
-      eq(actual, []);
     });
     it('should return empty array for findAll("person", customerEmail)', async () => {
-      const actual: Invoice[] = await db.findAll("invoice", [[
-        "customerEmail",
-        ALICE.email,
-      ]]);
-      eq(actual, []);
+      await assertFindAll<Invoice>(
+        db,
+        [],
+        ["invoice", [
+          ["customerEmail", ALICE.email],
+        ]],
+      );
     });
     it('should return empty array for findAll("person")', async () => {
-      const actual: Person[] = await db.findAll("person");
-      eq(actual, []);
+      await assertFindAll<Person>(db, [], ["person"]);
     });
     it('should return empty array for findAll("invoice")', async () => {
-      const actual: Invoice[] = await db.findAll("invoice");
-      eq(actual, []);
+      await assertFindAll<Invoice>(db, [], ["invoice"]);
     });
     it("should return empty array for findAll()", async () => {
-      const actual: unknown[] = await db.findAll<Person | Invoice>();
-      eq(actual, []);
+      await assertFindAll<Person | Invoice>(db, [], []);
     });
   });
   describe("clearEntity", () => {
@@ -221,65 +215,38 @@ describe("db", () => {
       await db.save("invoice", invoice1);
       await db.save("invoice", invoice2);
 
-      const actualPersons = await db.findAll("person", "ssn");
-      eq(actualPersons, [ALICE, BOB]);
-
-      const actualInvoices = await db.findAll("invoice", "invoiceNumber");
-      eq(actualInvoices, [invoice1, invoice2]);
+      await assertFindAll<Person>(db, [ALICE, BOB], ["person", "ssn"]);
+      await assertFindAll<Invoice>(db, [invoice1, invoice2], [
+        "invoice",
+        "invoiceNumber",
+      ]);
 
       await db.clearEntity("person");
-
-      const actualPersons2 = await db.findAll("person", "ssn");
-      eq(actualPersons2, []);
-
-      const actualInvoices2 = await db.findAll("invoice", "invoiceNumber");
-      eq(actualInvoices2, [invoice1, invoice2]);
+      await assertFindAll<Person>(db, [], ["person", "ssn"]);
+      await assertFindAll<Invoice>(db, [invoice1, invoice2], [
+        "invoice",
+        "invoiceNumber",
+      ]);
     });
   });
   describe("delete", () => {
     it("should delete a Person via ssn", async () => {
-      const person: Person = {
-        ssn: ALICE.ssn,
-        email: ALICE.email,
-        firstname: "Alice",
-        lastname: "Smith",
-        country: "US",
-        zipcode: "12345",
-      };
-      await db.save("person", person);
-      const actual: Person | undefined = await db.find(
-        "person",
-        "ssn",
-        ALICE.ssn,
-      );
-      eq(actual, person);
+      await db.save("person", ALICE);
+      await assertFind(db, ALICE, ["person", "ssn", ALICE.ssn]);
+
       await db.delete("person", "ssn", ALICE.ssn);
-      const actual2: Person | undefined = await db.find(
-        "person",
-        "ssn",
-        ALICE.ssn,
-      );
-      eq(actual2, undefined);
+      await assertFind(db, undefined, ["person", "ssn", ALICE.ssn]);
 
-      // check that the person was deleted from other indexes
-      const actual3: Person | undefined = await db.find(
-        "person",
-        "email",
-        ALICE.email,
-      );
-      eq(actual3, undefined);
-
-      const actual4: Person[] = await db.findAll(
+      // check that the person was deleted from other indices
+      await assertFind(db, undefined, ["person", "email", ALICE.email]);
+      await assertFindAll(db, [], [
         "person",
         [
           ["country", "US"],
           ["zipcode", "12345"],
         ],
-      );
-      eq(actual4, []);
-
-      const actual5: Person[] = await db.findAll("person");
-      eq(actual5, []);
+      ]);
+      await assertFindAll(db, [], ["person"]);
     });
     it("should delete an Invoice via invoiceNumber", async () => {
       const invoice: Invoice = {
@@ -287,19 +254,42 @@ describe("db", () => {
         customerEmail: ALICE.email,
       };
       await db.save("invoice", invoice);
-      const actual: Invoice | undefined = await db.find(
-        "invoice",
-        "invoiceNumber",
-        "123",
-      );
-      eq(actual, invoice);
+      await assertFind(db, invoice, ["invoice", "invoiceNumber", "123"]);
+
       await db.delete("invoice", "invoiceNumber", "123");
-      const actual2: Invoice | undefined = await db.find(
-        "invoice",
-        "invoiceNumber",
-        "123",
-      );
-      eq(actual2, undefined);
+      await assertFind(db, undefined, ["invoice", "invoiceNumber", "123"]);
     });
   });
 });
+
+/**
+ * Assert that an EntityInstance exists in the EntityDb.
+ *
+ * @param db The EntityDb to check.
+ * @param expected The expected EntityInstance.
+ * @param findArgs The arguments to pass to db.find.
+ */
+async function assertFind<T extends EntityInstance<T>>(
+  db: EntityDb<T>,
+  expected: Maybe<T>,
+  findArgs: Parameters<EntityDb<T>["find"]>,
+): Promise<void> {
+  const actual: Maybe<T> = await db.find(...findArgs);
+  eq(actual, expected);
+}
+
+/**
+ * Assert that an array of EntityInstances exists in the EntityDb.
+ *
+ * @param db The EntityDb to check.
+ * @param expected The expected EntityInstances.
+ * @param findAllArgs The arguments to pass to db.findAll.
+ */
+async function assertFindAll<T extends EntityInstance<T>>(
+  db: EntityDb<T>,
+  expected: T[],
+  findAllArgs: Parameters<EntityDb<T>["findAll"]>,
+): Promise<void> {
+  const actual: T[] = await db.findAll(...findAllArgs);
+  eq(actual, expected);
+}
