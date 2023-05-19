@@ -44,3 +44,6 @@ export function isKvKey(value: unknown): value is Deno.KvKey {
 export function isDefined<T>(value: T | undefined): value is T {
   return typeof value !== "undefined";
 }
+
+/** T or undefined */
+export type Maybe<T> = T | undefined;

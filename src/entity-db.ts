@@ -1,4 +1,4 @@
-import { asArray, isDefined, isKvKeyPart, prop, VOID } from "./fn.ts";
+import { asArray, isDefined, isKvKeyPart, Maybe, prop, VOID } from "./fn.ts";
 
 /*
  * General comment about the design of this EntityDb:
@@ -242,14 +242,14 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
     entityDefinitionId: ExtractEntityDefinitionId<T>,
     uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
-  ): Promise<T | undefined> {
+  ): Promise<Maybe<T>> {
     const key: Deno.KvKey = this.getUniqueKey(
       entityDefinitionId,
       uniquePropertyName,
       uniquePropertyValue,
     );
     return await this._doWithConnection(
-      {} as T | undefined,
+      {} as Maybe<T>,
       async (connection: Deno.Kv) => {
         const entry: Deno.KvEntryMaybe<T> = await connection.get<T>(key);
         return entry.value ?? undefined;
@@ -270,7 +270,7 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
     uniquePropertyName: keyof T,
     uniquePropertyValue: T[keyof T],
   ): Promise<void> {
-    const entityInstance: T | undefined = await this.find(
+    const entityInstance: Maybe<T> = await this.find(
       entityDefinitionId,
       uniquePropertyName,
       uniquePropertyValue,
@@ -355,10 +355,10 @@ export class EntityDb<Ts extends EntityInstance<Ts>> {
     entityDefinitionId?: ExtractEntityDefinitionId<T>,
     entityInstance?: T,
   ): Deno.KvKey[] {
-    if (typeof entityDefinitionId === "undefined") {
+    if (entityDefinitionId === undefined) {
       return [this.getNonUniqueKey()];
     }
-    if (typeof entityInstance === "undefined") {
+    if (entityInstance === undefined) {
       return [this.getNonUniqueKey(entityDefinitionId)];
     }
     return [
