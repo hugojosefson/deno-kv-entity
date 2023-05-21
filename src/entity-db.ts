@@ -9,33 +9,93 @@ import {
   PropertyLookupPair,
 } from "./types.ts";
 
-/*
- * General comment about the design of this EntityDb:
- *
- * uniqueProperty is related to a Deno.KvKey that can be used to look up a single EntityInstance.
- * indexedPropertyChain is related to a Deno.KvKey that can be used to lookup multiple EntityInstance.
- *
- * An EntityInstance is stored directly on each of the unique Deno.KvKey's derived from its EntityDefinition's uniqueProperties.
- * For each indexedPropertyChain, the Deno.KvKey to store the EntityInstance at, is calculated as:
- * [
- *   ...indexedPropertyChain.flatMap(prop => [prop, entityInstance[prop]]),
- *   EntityDefinition.uniqueProperties[0]
- * ].
- *
- * For example, if we have an EntityDefinition with id "person", and
- * uniqueProperties ["ssn", "emailAddress"], and
- * indexedPropertyChains [["lastname", "firstname"], ["country", "zipcode"]], then
- * we store the EntityInstance at the following keys:
- * - ["person", "ssn", "123456789"]
- * - ["person", "emailAddress", "alice@example.com"]
- * - ["person", "lastname", "Doe", "firstname", "Alice", "123456789"]
- * - ["person", "country", "US", "zipcode", "12345", "123456789"]
- *
- * The first two represent unique keys for an EntityInstance, and the last two represent indexed keys for that EntityInstance.
- */
-
 /**
- * Defines an EntityDb, and how to store EntityInstances in it.
+ * Defines an `EntityDb`, and how to store {@link EntityInstance}s in it.
+ *
+ * An `EntityDb` is a wrapper around a {@link Deno.Kv}, that allows you to store `EntityInstance`s in it.
+ *
+ * An `EntityInstance` is a concrete object that can be stored in the db.
+ *
+ * For example the following is an `EntityInstance`:
+ *
+ * ```ts
+ * {
+ *   firstname: "Alice",
+ *   lastname: "Doe",
+ *   ssn: "123456789",
+ *   emailAddress: "alice@example.com"
+ * }
+ * ```
+ *
+ * Currently, all keys and values in an `EntityInstance` must be of type {@link Deno.KvKeyPart}, because they _may_ be
+ * used for keys.
+ *
+ * @todo Find a way to type-safely allow values, and non-indexed keys, to be of any type.
+ *
+ * For example, the following is a {@link Deno.KvKey}, calculated from the `EntityInstance` above:
+ *
+ * ```ts
+ * ["person", "lastname", "Doe", "firstname", "Alice", "123456789"]
+ * ```
+ *
+ * The `EntityInstance` type is generic, so you can use any type you want for your `EntityInstance`s.
+ *
+ * For example:
+ *
+ * ```ts
+ * type Person = {
+ *   firstname: string,
+ *   lastname: string,
+ *   ssn: string,
+ *   emailAddress: string
+ * };
+ * ```
+ *
+ * You configure the `EntityDb` with a {@link DbConfig}, which defines the {@link EntityDefinition}s that can be stored
+ * in the `EntityDb`.
+ *
+ * For example:
+ *
+ * ```ts
+ * const entityDefinitions = {
+ *   person: {
+ *     id: "person",
+ *     uniqueProperties: ["ssn", "emailAddress"],
+ *     indexedPropertyChains: [["lastname", "firstname"], ["country", "zipcode"]],
+ *   },
+ *   invoice: {
+ *     id: "invoice",
+ *     uniqueProperties: ["invoiceNumber"],
+ *     indexedPropertyChains: [["customerEmailAddress"]],
+ *   },
+ * } as const;
+ *
+ * const db = new EntityDb({ entityDefinitions });
+ * ```
+ *
+ * - Each of the {@link EntityDefinition#uniqueProperties}, is related to a `Deno.KvKey` that can be used to look up a
+ * single `EntityInstance`.
+ * - Each of the {@link EntityDefinition#indexedPropertyChains}, is related to a `Deno.KvKey` that can be used to look
+ * up multiple `EntityInstance`s.
+ *
+ * Given the above `entityDefinitions`, we store the `Person` instance above in the following keys of the `Deno.Kv`:
+ *
+ * - `["person", "ssn", "123456789"]`
+ * - `["person", "emailAddress", "alice@example.com"]`
+ * - `["person", "lastname", "Doe", "firstname", "Alice", "123456789"]`
+ * - `["person", "country", "US", "zipcode", "12345", "123456789"]`
+ *
+ * The first two represent unique keys for the `Person` instance, and the last two represent indexed keys for that
+ * `Person` instance.
+ *
+ * We would store an `Invoice` instance in the following keys of the `Deno.Kv` (with for example an `invoiceNumber` of
+ * "123"):
+ *
+ * - `["invoice", "invoiceNumber", "123"]`
+ * - `["invoice", "customerEmailAddress", "alice@example.com", "123"]`
+ *
+ * @template Ts The `EntityInstance`s that can be stored in this `EntityDb`.
+ * @param config The configuration for this `EntityDb`.
  */
 export class EntityDb<Ts extends EntityInstance<Ts>> {
   /**
