@@ -15,7 +15,7 @@ export type EntityInstance<T extends EntityInstance<T>> = {
 /**
  * For example "person", "invoice", or "product".
  */
-type EntityDefinitionId = Deno.KvKeyPart & string;
+export type EntityDefinitionId = Deno.KvKeyPart & string;
 
 /**
  * A property on T, that is used to look up multiple instances of T.
