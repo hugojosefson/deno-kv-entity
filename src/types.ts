@@ -1,9 +1,40 @@
 /**
- * An EntityInstance, the concrete object that can be stored in the db.
+ * An `EntityInstance` is a concrete object that can be stored in the db.
  *
- * For example: {"firstname": "Alice", "lastname": "Doe", "ssn": "123456789", "emailAddress": "alice@example.com"}
+ * For example, the following is an `EntityInstance`:
  *
- * All the keys and values we care about are related to the db keys, so must be of type Deno.KvKeyPart.
+ * ```ts
+ * {
+ *   firstname: "Alice",
+ *   lastname: "Doe",
+ *   ssn: "123456789",
+ *   emailAddress: "alice@example.com"
+ * }
+ * ```
+ *
+ * Currently, all keys and values in an `EntityInstance` must be of type {@link Deno.KvKeyPart}, because they _may_ be
+ * used for keys.
+ *
+ * @todo Find a way to type-safely allow values, and non-indexed keys, to be of any type.
+ *
+ * For example, the following is a {@link Deno.KvKey}, calculated from the `EntityInstance` above:
+ *
+ * ```ts
+ * ["person", "lastname", "Doe", "firstname", "Alice", "123456789"]
+ * ```
+ *
+ * The `EntityInstance` type is generic, so you can use any type you want for your `EntityInstance`s.
+ *
+ * For example:
+ *
+ * ```ts
+ * type Person = {
+ *   firstname: string,
+ *   lastname: string,
+ *   ssn: string,
+ *   emailAddress: string
+ * };
+ * ```
  */
 export type EntityInstance<T extends EntityInstance<T>> = {
   [K in keyof T]: K extends Deno.KvKeyPart ? (
