@@ -10,46 +10,11 @@ import {
 } from "./types.ts";
 
 /**
- * Defines an `EntityDb`, and how to store {@link EntityInstance}s in it.
+ * Defines an `EntityDb`, and its structure.
  *
- * An `EntityDb` is a wrapper around a {@link Deno.Kv}, that allows you to store `EntityInstance`s in it.
+ * An `EntityDb` is a wrapper around {@link Deno.Kv}.
  *
- * An `EntityInstance` is a concrete object that can be stored in the db.
- *
- * For example the following is an `EntityInstance`:
- *
- * ```ts
- * {
- *   firstname: "Alice",
- *   lastname: "Doe",
- *   ssn: "123456789",
- *   emailAddress: "alice@example.com"
- * }
- * ```
- *
- * Currently, all keys and values in an `EntityInstance` must be of type {@link Deno.KvKeyPart}, because they _may_ be
- * used for keys.
- *
- * @todo Find a way to type-safely allow values, and non-indexed keys, to be of any type.
- *
- * For example, the following is a {@link Deno.KvKey}, calculated from the `EntityInstance` above:
- *
- * ```ts
- * ["person", "lastname", "Doe", "firstname", "Alice", "123456789"]
- * ```
- *
- * The `EntityInstance` type is generic, so you can use any type you want for your `EntityInstance`s.
- *
- * For example:
- *
- * ```ts
- * type Person = {
- *   firstname: string,
- *   lastname: string,
- *   ssn: string,
- *   emailAddress: string
- * };
- * ```
+ * An {@link EntityInstance} is a concrete object, that you store in the `EntityDb`.
  *
  * You configure the `EntityDb` with a {@link DbConfig}, which defines the {@link EntityDefinition}s that can be stored
  * in the `EntityDb`.
