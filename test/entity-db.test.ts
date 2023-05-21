@@ -5,12 +5,9 @@ import {
   describe,
   it,
 } from "https://deno.land/std@0.188.0/testing/bdd.ts";
-import {
-  EntityDb,
-  EntityDefinition,
-  EntityInstance,
-} from "../src/entity-db.ts";
+import { EntityDb } from "../src/entity-db.ts";
 import { Maybe } from "../src/fn.ts";
+import { EntityDefinition, EntityInstance } from "../src/types.ts";
 
 export const TEST_PREFIX: string[] = [import.meta.url];
 
