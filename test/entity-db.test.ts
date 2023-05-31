@@ -6,7 +6,7 @@ import {
   it,
 } from "https://deno.land/std@0.188.0/testing/bdd.ts";
 import { EntityDb } from "../src/entity-db.ts";
-import { Maybe } from "../src/fn.ts";
+import { asArray, Maybe } from "../src/fn.ts";
 import { EntityDefinition, EntityInstance } from "../src/types.ts";
 
 export const TEST_PREFIX: string[] = [import.meta.url];
@@ -290,3 +290,164 @@ async function assertFindAll<T extends EntityInstance<T>>(
   const actual: T[] = await db.findAll(...findAllArgs);
   eq(actual, expected);
 }
+
+/**
+ * Assert that the EntityDb contains the given key-value pairs.
+ * @param db The EntityDb to check.
+ * @param expected The expected key-value pairs.
+ * @returns
+ * @throws AssertionError if the EntityDb does not contain the expected key-value pairs.
+ * @throws AssertionError if the EntityDb contains additional key-value pairs.
+ * @throws AssertionError if the EntityDb contains the expected key-value pairs, but the values are not equal.
+ */
+async function assertDbIs<T extends [Deno.KvKey, unknown][]>(
+  // deno-lint-ignore no-explicit-any
+  db: EntityDb<any>,
+  expected: T,
+): Promise<void> {
+  const actual: [Deno.KvKey, unknown][] = await db._doWithConnection(
+    expected,
+    async (conn) => {
+      const entriesIterator = conn.list({ prefix: [] });
+      const entries: Deno.KvEntry<unknown>[] = await asArray(entriesIterator);
+      return entries.map((entry) => [entry.key, entry.value]);
+    },
+  );
+  eq(actual.toSorted(), expected.toSorted());
+}
+
+describe("Entire DB", () => {
+  it("should be empty by default", async () => {
+    await assertDbIs(db, []);
+  });
+  it("should contain a Person", async () => {
+    await db.save("person", ALICE);
+    await assertDbIs(db, [
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_PERSON.id,
+          ...["country", ALICE.country],
+          ...["zipcode", ALICE.zipcode],
+          ALICE.ssn,
+        ],
+        ALICE,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_PERSON.id,
+          ...["email", ALICE.email],
+        ],
+        ALICE,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_PERSON.id,
+          ...["lastname", ALICE.lastname],
+          ...["firstname", ALICE.firstname],
+          ALICE.ssn,
+        ],
+        ALICE,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_PERSON.id,
+          ...["ssn", ALICE.ssn],
+        ],
+        ALICE,
+      ],
+    ]);
+  });
+  it("should contain an Invoice", async () => {
+    const invoice: Invoice = {
+      invoiceNumber: "123",
+      customerEmail: ALICE.email,
+    };
+    await db.save("invoice", invoice);
+    await assertDbIs(db, [
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_INVOICE.id,
+          ...["customerEmail", invoice.customerEmail],
+          invoice.invoiceNumber,
+        ],
+        invoice,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_INVOICE.id,
+          ...["invoiceNumber", invoice.invoiceNumber],
+        ],
+        invoice,
+      ],
+    ]);
+  });
+  it("should contain a Person and an Invoice", async () => {
+    await db.save("person", ALICE);
+    const invoice: Invoice = {
+      invoiceNumber: "123",
+      customerEmail: ALICE.email,
+    };
+    await db.save("invoice", invoice);
+    await assertDbIs(db, [
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_PERSON.id,
+          ...["country", ALICE.country],
+          ...["zipcode", ALICE.zipcode],
+          ALICE.ssn,
+        ],
+        ALICE,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_PERSON.id,
+          ...["email", ALICE.email],
+        ],
+        ALICE,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_PERSON.id,
+          ...["lastname", ALICE.lastname],
+          ...["firstname", ALICE.firstname],
+          ALICE.ssn,
+        ],
+        ALICE,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_PERSON.id,
+          ...["ssn", ALICE.ssn],
+        ],
+        ALICE,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_INVOICE.id,
+          ...["customerEmail", invoice.customerEmail],
+          invoice.invoiceNumber,
+        ],
+        invoice,
+      ],
+      [
+        [
+          import.meta.url,
+          ENTITY_DEFINITION_INVOICE.id,
+          ...["invoiceNumber", invoice.invoiceNumber],
+        ],
+        invoice,
+      ],
+    ]);
+  });
+});
