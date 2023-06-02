@@ -7,7 +7,7 @@ Requires [Deno](https://deno.land/) v1.32 or later, with the `--unstable` flag.
 
 Current build status:
 
-[![deno](https://github.com/hugojosefson/deno-kv-entity/actions/workflows/deno.yaml/badge.svg)](https://github.com/hugojosefson/deno-kv-entity/actions/workflows/deno.yaml)
+[![CI](https://github.com/hugojosefson/deno-kv-entity/actions/workflows/ci.yaml/badge.svg)](https://github.com/hugojosefson/deno-kv-entity/actions/workflows/ci.yaml)
 
 ## Usage
 
