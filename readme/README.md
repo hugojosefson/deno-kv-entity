@@ -3,7 +3,7 @@
 Typed library for specifying and storing entities in a
 [Deno.Kv](https://deno.com/kv) database.
 
-[![deno land](https://img.shields.io/badge/x/kv__entity-black.svg?logo=deno&labelColor=black)](https://deno.land/x/kv_entity)
+[![deno module](https://shield.deno.dev/x/kv_entity)](https://deno.land/x/kv_entity)
 [![CI](https://github.com/hugojosefson/deno-kv-entity/actions/workflows/ci.yaml/badge.svg)](https://github.com/hugojosefson/deno-kv-entity/actions/workflows/ci.yaml)
 
 ## Requirements
