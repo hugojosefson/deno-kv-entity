@@ -1,10 +1,10 @@
-import { assertEquals as eq } from "https://deno.land/std@0.188.0/testing/asserts.ts";
+import { assertEquals as eq } from "https://deno.land/std@0.190.0/testing/asserts.ts";
 import {
   beforeAll,
   beforeEach,
   describe,
   it,
-} from "https://deno.land/std@0.188.0/testing/bdd.ts";
+} from "https://deno.land/std@0.190.0/testing/bdd.ts";
 import { EntityDb } from "../src/entity-db.ts";
 import { Maybe } from "../src/fn.ts";
 import { EntityDefinition } from "../src/types.ts";

@@ -1,6 +1,6 @@
 import { EntityDb } from "../src/entity-db.ts";
 import { asArray } from "../src/fn.ts";
-import { assertEquals as eq } from "https://deno.land/std@0.188.0/testing/asserts.ts";
+import { assertEquals as eq } from "https://deno.land/std@0.190.0/testing/asserts.ts";
 
 /**
  * Assert that the EntityDb contains the given key-value pairs.
