@@ -26,6 +26,7 @@ let db: EntityDb<Person | Invoice>;
 beforeAll(() => {
   db = new EntityDb<Person | Invoice>({
     prefix: TEST_PREFIX,
+    dbFilePath: "./test.db",
     entityDefinitions: {
       person: ENTITY_DEFINITION_PERSON as EntityDefinition<Person>,
       invoice: ENTITY_DEFINITION_INVOICE as EntityDefinition<Invoice>,
