@@ -6,7 +6,7 @@ import {
   it,
 } from "https://deno.land/std@0.188.0/testing/bdd.ts";
 import { EntityDb } from "../src/entity-db.ts";
-import { asArray, Maybe } from "../src/fn.ts";
+import { Maybe } from "../src/fn.ts";
 import { EntityDefinition, EntityInstance } from "../src/types.ts";
 import {
   ALICE,
@@ -16,6 +16,7 @@ import {
   Invoice,
   Person,
 } from "./fixtures.ts";
+import { assertDbIs } from "./assert-db-is.ts";
 
 export const TEST_PREFIX: string[] = [import.meta.url];
 
@@ -246,31 +247,6 @@ async function assertFindAll<T extends EntityInstance<T>>(
 ): Promise<void> {
   const actual: T[] = await db.findAll(...findAllArgs);
   eq(actual, expected);
-}
-
-/**
- * Assert that the EntityDb contains the given key-value pairs.
- * @param db The EntityDb to check.
- * @param expected The expected key-value pairs.
- * @returns
- * @throws AssertionError if the EntityDb does not contain the expected key-value pairs.
- * @throws AssertionError if the EntityDb contains additional key-value pairs.
- * @throws AssertionError if the EntityDb contains the expected key-value pairs, but the values are not equal.
- */
-async function assertDbIs<T extends [Deno.KvKey, unknown][]>(
-  // deno-lint-ignore no-explicit-any
-  db: EntityDb<any>,
-  expected: T,
-): Promise<void> {
-  const actual: [Deno.KvKey, unknown][] = await db._doWithConnection(
-    expected,
-    async (conn) => {
-      const entriesIterator = conn.list({ prefix: [] });
-      const entries: Deno.KvEntry<unknown>[] = await asArray(entriesIterator);
-      return entries.map((entry) => [entry.key, entry.value]);
-    },
-  );
-  eq(actual.toSorted(), expected.toSorted());
 }
 
 describe("Entire DB", () => {
