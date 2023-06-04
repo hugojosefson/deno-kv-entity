@@ -6,5 +6,6 @@ export type {
   EntityDefinitionId,
   EntityInstance,
   IndexedProperty,
+  KvValue,
   PropertyLookupPair,
 } from "./src/types.ts";

@@ -1,3 +1,18 @@
+export type KvValue =
+  | undefined
+  | null
+  | boolean
+  | number
+  | string
+  | bigint
+  | Uint8Array
+  | Array<unknown>
+  | Record<string | number, unknown>
+  | Map<unknown, unknown>
+  | Set<unknown>
+  | Date
+  | RegExp;
+
 /**
  * An `EntityInstance` is a concrete object that can be stored in the db.
  *
@@ -38,7 +53,7 @@
  */
 export type EntityInstance<T extends EntityInstance<T>> = {
   [K in keyof T]: K extends Deno.KvKeyPart ? (
-      T[K] extends Deno.KvKeyPart ? T[K] : never
+      T[K] extends KvValue ? T[K] : never
     )
     : never;
 };
