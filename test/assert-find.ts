@@ -1,7 +1,7 @@
 import { EntityInstance } from "../src/types.ts";
 import { EntityDb } from "../src/entity-db.ts";
 import { Maybe } from "../src/fn.ts";
-import { assertEquals as eq } from "https://deno.land/std@0.190.0/testing/asserts.ts";
+import { assertEquals as eq } from "https://deno.land/std@0.221.0/testing/asserts.ts";
 
 /**
  * Assert that an EntityInstance exists in the EntityDb.

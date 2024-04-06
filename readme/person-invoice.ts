@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --unstable --allow-write=example-person-invoice.db --allow-read=example-person-invoice.db
+#!/usr/bin/env -S deno run --unstable-kv --allow-write=example-person-invoice.db --allow-read=example-person-invoice.db
 import { EntityDb, EntityDefinition } from "../mod.ts";
 
 // What your data looks like. These are yours. You define them,
